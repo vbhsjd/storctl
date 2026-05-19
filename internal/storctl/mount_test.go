@@ -35,6 +35,35 @@ func TestVerifyRDMAMountIncludesDiagnostics(t *testing.T) {
 	}
 }
 
+func TestRequireRDMAClientRejectsEmptyRDMALink(t *testing.T) {
+	r := &fakeRunner{
+		exists: map[string]bool{"rdma": true, "modprobe": true},
+		outputs: map[string]string{
+			"modprobe xprtrdma": "",
+			"rdma link":         "",
+		},
+	}
+	err := requireRDMAClient(r)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "rdma link is empty") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRequireRDMAClientAcceptsRDMALink(t *testing.T) {
+	r := &fakeRunner{
+		exists: map[string]bool{"rdma": true},
+		outputs: map[string]string{
+			"rdma link": "link mlx5_1/1 state ACTIVE physical_state LINK_UP netdev enp194s0f1np1\n",
+		},
+	}
+	if err := requireRDMAClient(r); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 type fakeRunner struct {
 	exists  map[string]bool
 	outputs map[string]string

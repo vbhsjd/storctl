@@ -9,6 +9,9 @@ import (
 )
 
 func configureMounts(cfg Config, systemd bool, r *Reporter, runner Runner) error {
+	if err := requireRDMAClient(runner); err != nil {
+		return err
+	}
 	for _, m := range cfg.Mounts {
 		if err := os.MkdirAll(m.MountPoint, 0755); err != nil {
 			return err
@@ -194,6 +197,23 @@ func isMountPoint(path string, runner Runner) bool {
 func unmount(path string, runner Runner) error {
 	_, err := runner.Run("umount", path)
 	return err
+}
+
+func requireRDMAClient(runner Runner) error {
+	if runner.Exists("modprobe") {
+		_, _ = runner.Run("modprobe", "xprtrdma")
+	}
+	if !runner.Exists("rdma") {
+		return fmt.Errorf("rdma command not found")
+	}
+	out, err := runner.Run("rdma", "link")
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(out) == "" {
+		return fmt.Errorf("rdma link is empty; no RDMA device is available for NFS-RDMA")
+	}
+	return nil
 }
 
 func systemdMountUnitName(mountPoint string) string {
