@@ -17,7 +17,7 @@ func Check(cfg Config, r *Reporter, runner Runner) error {
 	osID, osVersion, err := detectOS()
 	if err != nil {
 		r.Warn("os unknown: %v", err)
-	} else if osID == "openeuler" && supportedOpenEuler(osVersion) {
+	} else if isOpenEuler(osID) && supportedOpenEuler(osVersion) {
 		r.OK("os openEuler %s", osVersion)
 	} else {
 		r.Warn("os %s %s not tested", osID, osVersion)

@@ -54,6 +54,10 @@ func supportedOpenEuler(version string) bool {
 	return strings.HasPrefix(version, "22") || strings.HasPrefix(version, "23") || strings.HasPrefix(version, "24")
 }
 
+func isOpenEuler(id string) bool {
+	return strings.EqualFold(id, "openeuler")
+}
+
 func hasSystemd(r Runner) bool {
 	if !r.Exists("systemctl") {
 		return false

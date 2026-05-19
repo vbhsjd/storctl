@@ -37,3 +37,9 @@ func TestParseMountSpecRejectsBadShape(t *testing.T) {
 		}
 	}
 }
+
+func TestIsOpenEulerCaseInsensitive(t *testing.T) {
+	if !isOpenEuler("openEuler") {
+		t.Fatal("openEuler should be detected case-insensitively")
+	}
+}

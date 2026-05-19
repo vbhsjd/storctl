@@ -55,7 +55,7 @@ func cx7QoSCommands(nic, ibdev string) []string {
 		fmt.Sprintf("mlnx_qos -i %s --pfc 0,0,0,0,1,0,0,0 --trust dscp", shellQuote(nic)),
 		fmt.Sprintf("cma_roce_tos -d %s -t 128", shellQuote(ibdev)),
 		fmt.Sprintf("mlnx_qos -i %s --prio_tc 1,0,0,0,4,0,0,0", shellQuote(nic)),
-		fmt.Sprintf("mlnx_qos -i %s --tsa ets,ets,ets,ets,ets,ets,ets,ets, --tcbw 10,0,0,0,90,0,0,0", shellQuote(nic)),
+		fmt.Sprintf("mlnx_qos -i %s --tsa ets,ets,ets,ets,ets,ets,ets,ets --tcbw 10,0,0,0,90,0,0,0", shellQuote(nic)),
 	}
 }
 
