@@ -61,8 +61,9 @@ func cx7QoSCommands(nic, ibdev string) []string {
 
 func hinicQoSCommands(nic string) []string {
 	q := shellQuote(nic)
+	ecnPath := shellQuote("/sys/class/net/" + nic + "/ecn/cc_algo")
 	return []string{
-		fmt.Sprintf("echo dcqcn > /sys/class/net/%s/ecn/cc_algo", q),
+		fmt.Sprintf("if [ -e %s ]; then echo dcqcn > %s; fi", ecnPath, ecnPath),
 		fmt.Sprintf("hinicadm3 qos -i %s -t dcb -e 1", q),
 		fmt.Sprintf("hinicadm3 qos -i %s -t pfc -e 1 -f 0,0,0,0,1,0,0,0", q),
 		fmt.Sprintf("hinicadm3 qos -i %s --dev_trust dscp", q),

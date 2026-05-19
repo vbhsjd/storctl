@@ -15,3 +15,11 @@ func TestCX7QoSCommandsNoTrailingTSACComma(t *testing.T) {
 		t.Fatalf("tsa command missing expected form: %s", joined)
 	}
 }
+
+func TestHinicQoSCommandsTolerateMissingECN(t *testing.T) {
+	cmds := hinicQoSCommands("enp23s0f1")
+	joined := strings.Join(cmds, "\n")
+	if !strings.Contains(joined, "if [ -e '/sys/class/net/enp23s0f1/ecn/cc_algo' ]; then echo dcqcn") {
+		t.Fatalf("ecn command should be conditional: %s", joined)
+	}
+}
