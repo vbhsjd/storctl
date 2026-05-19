@@ -125,11 +125,23 @@ func mountNow(m MountSpec, systemd bool, r *Reporter, runner Runner) error {
 			r.Warn("automount start failed for %s: %v", m.MountPoint, err)
 			r.Warn("trying direct nfs mount for %s", m.MountPoint)
 		} else if isMountPoint(m.MountPoint, runner) {
-			return nil
+			if ok, _ := mountIsRDMA(m, runner); ok {
+				return nil
+			}
+			r.Warn("mount %s exists but is not rdma; remounting", m.MountPoint)
+			if err := unmount(m.MountPoint, runner); err != nil {
+				return err
+			}
 		}
 	}
 	if isMountPoint(m.MountPoint, runner) {
-		return nil
+		if ok, _ := mountIsRDMA(m, runner); ok {
+			return nil
+		}
+		r.Warn("mount %s exists but is not rdma; remounting", m.MountPoint)
+		if err := unmount(m.MountPoint, runner); err != nil {
+			return err
+		}
 	}
 	_, err := runner.Run("mount", "-t", "nfs", "-o", m.Options, m.Server+":"+m.Export, m.MountPoint)
 	return err
@@ -137,14 +149,10 @@ func mountNow(m MountSpec, systemd bool, r *Reporter, runner Runner) error {
 
 func verifyRDMAMount(m MountSpec, runner Runner) error {
 	details := []string{}
-	if runner.Exists("findmnt") {
-		out, err := runner.Run("findmnt", "-n", "--mountpoint", m.MountPoint, "-o", "FSTYPE,OPTIONS")
-		if err == nil && strings.Contains(out, "nfs") && strings.Contains(out, "proto=rdma") {
-			return nil
-		}
-		if strings.TrimSpace(out) != "" {
-			details = append(details, "findmnt: "+strings.TrimSpace(out))
-		}
+	if ok, detail := mountIsRDMA(m, runner); ok {
+		return nil
+	} else if detail != "" {
+		details = append(details, detail)
 	}
 	if runner.Exists("nfsstat") {
 		out, err := runner.Run("nfsstat", "-m")
@@ -161,6 +169,19 @@ func verifyRDMAMount(m MountSpec, runner Runner) error {
 	return fmt.Errorf("nfsstat/findmnt does not show %s as proto=rdma", m.MountPoint)
 }
 
+func mountIsRDMA(m MountSpec, runner Runner) (bool, string) {
+	if runner.Exists("findmnt") {
+		out, err := runner.Run("findmnt", "-n", "--mountpoint", m.MountPoint, "-o", "FSTYPE,OPTIONS")
+		if err == nil && strings.Contains(out, "nfs") && strings.Contains(out, "proto=rdma") {
+			return true, ""
+		}
+		if strings.TrimSpace(out) != "" {
+			return false, "findmnt: " + strings.TrimSpace(out)
+		}
+	}
+	return false, ""
+}
+
 func isMountPoint(path string, runner Runner) bool {
 	if runner.Exists("findmnt") {
 		_, err := runner.Run("findmnt", "-n", "--mountpoint", path)
@@ -168,6 +189,11 @@ func isMountPoint(path string, runner Runner) bool {
 	}
 	_, err := runner.Run("mountpoint", "-q", path)
 	return err == nil
+}
+
+func unmount(path string, runner Runner) error {
+	_, err := runner.Run("umount", path)
+	return err
 }
 
 func systemdMountUnitName(mountPoint string) string {
