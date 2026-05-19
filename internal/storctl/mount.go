@@ -22,7 +22,7 @@ func configureMounts(cfg Config, systemd bool, r *Reporter, runner Runner) error
 				return err
 			}
 		}
-		if err := mountNow(m, systemd, runner); err != nil {
+		if err := mountNow(m, systemd, r, runner); err != nil {
 			return err
 		}
 		if err := verifyRDMAMount(m, runner); err != nil {
@@ -118,11 +118,14 @@ func persistFstabMount(m MountSpec, r *Reporter) error {
 	return nil
 }
 
-func mountNow(m MountSpec, systemd bool, runner Runner) error {
+func mountNow(m MountSpec, systemd bool, r *Reporter, runner Runner) error {
 	if systemd {
 		unit := strings.TrimSuffix(systemdMountUnitName(m.MountPoint), ".mount") + ".automount"
 		if _, err := runner.Run("systemctl", "start", unit); err != nil {
-			return err
+			r.Warn("automount start failed for %s: %v", m.MountPoint, err)
+			r.Warn("trying direct nfs mount for %s", m.MountPoint)
+		} else if _, err := runner.Run("findmnt", "-n", "-T", m.MountPoint); err == nil {
+			return nil
 		}
 	}
 	if _, err := runner.Run("findmnt", "-n", "-T", m.MountPoint); err == nil {

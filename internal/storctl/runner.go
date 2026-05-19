@@ -20,6 +20,20 @@ type OSRunner struct {
 	env []string
 }
 
+type CommandError struct {
+	Command string
+	Output  string
+	Err     error
+}
+
+func (e CommandError) Error() string {
+	output := strings.TrimSpace(e.Output)
+	if output == "" {
+		return fmt.Sprintf("%s: %v", e.Command, e.Err)
+	}
+	return fmt.Sprintf("%s: %v: %s", e.Command, e.Err, output)
+}
+
 func NewOSRunner(proxy, noProxy string) *OSRunner {
 	env := os.Environ()
 	if proxy != "" {
@@ -41,10 +55,10 @@ func (r *OSRunner) Run(name string, args ...string) (string, error) {
 	cmd.Stderr = &out
 	err := cmd.Run()
 	if ctx.Err() == context.DeadlineExceeded {
-		return out.String(), fmt.Errorf("%s timed out", name)
+		return out.String(), CommandError{Command: name + " " + strings.Join(args, " "), Output: out.String(), Err: ctx.Err()}
 	}
 	if err != nil {
-		return out.String(), fmt.Errorf("%s %s: %w", name, strings.Join(args, " "), err)
+		return out.String(), CommandError{Command: name + " " + strings.Join(args, " "), Output: out.String(), Err: err}
 	}
 	return out.String(), nil
 }
