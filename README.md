@@ -1,17 +1,14 @@
 # storctl
 
-[中文文档](README.zh-CN.md)
+[English documentation](README.en.md)
 
-`storctl` joins a lab host to NFS-RDMA storage.
+`storctl` 用于把实验室机器接入 NFS-RDMA 存储。
 
-It configures a storage NIC, NetworkManager VLAN, routing rule, CX7/1823 QoS,
-NFS-RDMA mounts, mount persistence, and a small state file for later checks. It
-is designed to be copied to one host and run directly, or called by Ansible for
-batch onboarding.
+它会配置存储网卡、NetworkManager VLAN、策略路由、CX7/1823 QoS、NFS-RDMA 挂载、挂载持久化，并写入一个状态文件供后续检查。它既可以单机直接运行，也可以被 Ansible 调用做批量接入。
 
-## Quick Start
+## 快速开始
 
-Explicit single-host mode:
+单机显式参数模式：
 
 ```bash
 storctl apply \
@@ -26,48 +23,47 @@ storctl apply \
   --mount 172.27.1.1:/Weight:/mnt/weight
 ```
 
-Profile-driven mode:
+Profile 模式：
 
 ```bash
 storctl plan --profile c4 --nic enp23s0f1 --mgmt-ip 80.5.17.113
 storctl apply --profile c4 --nic enp23s0f1 --mgmt-ip 80.5.17.113
 ```
 
-Check the current host:
+检查当前机器状态：
 
 ```bash
 storctl check
 ```
 
-## Workflow
+## 工作流
 
 ```mermaid
 flowchart TD
-  A["storctl plan/apply"] --> B["Load profile"]
-  B --> C["Detect management IP"]
-  C --> D["Derive data IP"]
-  D --> E["Merge CLI overrides"]
-  E --> F["Check OS/NIC/driver"]
-  F --> G["Configure NetworkManager VLAN"]
-  G --> H["Apply QoS"]
-  H --> I["Check RDMA client"]
-  I --> J["Persist mounts"]
-  J --> K["Mount NFS-RDMA"]
-  K --> L["Write state.json"]
+  A["storctl plan/apply"] --> B["加载 profile"]
+  B --> C["检测管理 IP"]
+  C --> D["推导数据网 IP"]
+  D --> E["合并 CLI 覆盖参数"]
+  E --> F["检查 OS/NIC/驱动"]
+  F --> G["配置 NetworkManager VLAN"]
+  G --> H["应用 QoS"]
+  H --> I["检查 RDMA 客户端"]
+  I --> J["持久化挂载"]
+  J --> K["挂载 NFS-RDMA"]
+  K --> L["写入 state.json"]
 ```
 
-`plan` stops after rendering the final configuration. It never changes the
-host. `apply` runs the full workflow.
+`plan` 只输出最终配置，不修改机器。`apply` 执行完整接入流程。
 
 ## Profiles
 
-Profiles reduce per-host arguments. `storctl` looks for profiles in this order:
+Profile 用来减少每台机器需要传入的参数。`storctl` 按下面顺序查找 profile 文件：
 
 1. `--profile-file /path/to/storctl-profiles.json`
 2. `./storctl-profiles.json`
 3. `/etc/storctl/profiles.json`
 
-Example:
+示例：
 
 ```json
 {
@@ -91,7 +87,7 @@ Example:
 }
 ```
 
-Data IP derivation uses the management IP:
+数据网 IP 根据管理 IP 推导：
 
 ```text
 mgmt-ip 80.5.17.113
@@ -100,12 +96,11 @@ prefix = 18
 result = 172.27.4.113/18
 ```
 
-CLI arguments always win over profile values. For example, `--data-ip` skips
-data IP derivation, and repeated `--mount` flags replace profile mounts.
+CLI 参数优先级最高。比如显式传 `--data-ip` 会跳过 IP 推导，重复传 `--mount` 会覆盖 profile 里的挂载配置。
 
-## Batch Usage
+## 批量使用
 
-Recommended Ansible shape:
+推荐 Ansible 形态：
 
 ```bash
 ansible all -m copy -a "src=storctl-linux-arm64 dest=/usr/local/bin/storctl mode=0755"
@@ -114,14 +109,13 @@ ansible all -m shell -a "storctl plan --profile c4 --nic {{ storage_nic }} --mgm
 ansible all -m shell -a "storctl apply --profile c4 --nic {{ storage_nic }} --mgmt-ip {{ ansible_host }}"
 ```
 
-For mixed clusters, create one profile per cluster and pass the profile name
-from inventory:
+如果有多个集群，每个集群维护一个 profile，并在 inventory 中传入 profile 名称：
 
 ```bash
 ansible all -m shell -a "storctl apply --profile {{ storage_profile }} --nic {{ storage_nic }} --mgmt-ip {{ ansible_host }}"
 ```
 
-## Build
+## 构建
 
 ```bash
 go test ./...
@@ -129,18 +123,16 @@ go build ./cmd/storctl
 GOOS=linux GOARCH=arm64 go build -o storctl-linux-arm64 ./cmd/storctl
 ```
 
-## Driver Artifacts
+## 驱动包
 
-Artifacts are read from `--artifact-dir`; `storctl` does not fetch public
-packages by itself.
+驱动包从 `--artifact-dir` 指定目录读取；`storctl` 不会主动从公网下载包。
 
-- CX7 supports `doca-host*.rpm`, then installs `doca-ofed` through the host's
-  configured `dnf` repos.
-- CX7 also supports legacy `MLNX_OFED_LINUX-*.tgz` and `IB_NIC-*.tgz`.
-- 1823 supports `nic_1823.tar.gz` or `hinic*.tar.gz`.
-- Firmware upgrade is disabled unless `--upgrade-firmware` is set.
+- CX7 支持 `doca-host*.rpm`，随后通过机器已有 `dnf` 源安装 `doca-ofed`。
+- CX7 也兼容旧的 `MLNX_OFED_LINUX-*.tgz` 和 `IB_NIC-*.tgz`。
+- 1823 支持 `nic_1823.tar.gz` 或 `hinic*.tar.gz`。
+- 默认不升级固件，除非显式传 `--upgrade-firmware`。
 
-For DOCA-Host:
+DOCA-Host 示例：
 
 ```bash
 wget https://www.mellanox.com/downloads/DOCA/DOCA_v3.3.0/host/doca-host-3.3.0-088000_26.01_openeuler2403.aarch64.rpm
@@ -148,44 +140,43 @@ mkdir -p /root/storage_pkgs
 cp doca-host-3.3.0-088000_26.01_openeuler2403.aarch64.rpm /root/storage_pkgs/
 ```
 
-## Troubleshooting
+## 排障
 
-`rdma link` is empty:
+`rdma link` 为空：
 
-- The host has no available RDMA device, so NFS-RDMA cannot work yet.
-- Check drivers and modules:
+- 当前机器没有可用 RDMA 设备，NFS-RDMA 还不能工作。
+- 检查驱动和模块：
   ```bash
   rdma link
   lsmod | grep -iE 'rdma|roce|ib_|uverbs|xprtrdma|hinic|mlx5'
   modprobe xprtrdma
   ```
 
-Mount is TCP instead of RDMA:
+挂载是 TCP，不是 RDMA：
 
-- `storctl` remounts target paths when it finds `proto=tcp`.
-- Verify:
+- `storctl` 发现 `proto=tcp` 时会尝试重新挂成 RDMA。
+- 验证命令：
   ```bash
   findmnt --mountpoint /mnt/share -o TARGET,FSTYPE,SOURCE,OPTIONS
   nfsstat -m
   ```
 
-systemd automount fails:
+systemd automount 失败：
 
-- `storctl` falls back to direct `mount -t nfs`.
-- Inspect unit logs:
+- `storctl` 会 fallback 到直接 `mount -t nfs`。
+- 查看 unit 日志：
   ```bash
   systemctl status mnt-share.automount --no-pager
   journalctl -u mnt-share.automount -xe
   ```
 
-1823 ECN sysfs is missing:
+1823 缺少 ECN sysfs：
 
-- Some 1823 driver versions do not expose `/sys/class/net/<nic>/ecn/cc_algo`.
-- `storctl` treats that as optional and still applies `hinicadm3 qos`.
+- 部分 1823 驱动版本没有 `/sys/class/net/<nic>/ecn/cc_algo`。
+- `storctl` 会把它当作可选项跳过，并继续执行 `hinicadm3 qos`。
 
-## Notes
+## 说明
 
-- `storctl` does not implement DTFS, `cid`, `dn`, or zone generation.
-- State is written to `/var/lib/storctl/state.json`.
-- With systemd, mounts use `.mount/.automount` units. Without systemd, mounts
-  are persisted in `/etc/fstab`.
+- `storctl` 不实现 DTFS、`cid`、`dn` 或 zone 生成。
+- 状态文件写入 `/var/lib/storctl/state.json`。
+- 有 systemd 时使用 `.mount/.automount` 持久化挂载；没有 systemd 时写入 `/etc/fstab`。
