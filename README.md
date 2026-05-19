@@ -1,5 +1,7 @@
 # storctl
 
+[中文文档](README.zh-CN.md)
+
 `storctl` joins a lab host to NFS-RDMA storage.
 
 It configures a storage NIC, NetworkManager VLAN, routing rule, CX7/1823 QoS,
