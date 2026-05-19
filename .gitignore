@@ -1,0 +1,5 @@
+/storctl
+/storctl-*
+*.zip
+*.tar.gz
+.DS_Store

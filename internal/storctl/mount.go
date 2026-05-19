@@ -1,0 +1,161 @@
+package storctl
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+)
+
+func configureMounts(cfg Config, systemd bool, r *Reporter, runner Runner) error {
+	for _, m := range cfg.Mounts {
+		if err := os.MkdirAll(m.MountPoint, 0755); err != nil {
+			return err
+		}
+		if systemd {
+			if err := persistSystemdMount(m, r, runner); err != nil {
+				return err
+			}
+		} else {
+			if err := persistFstabMount(m, r); err != nil {
+				return err
+			}
+		}
+		if err := mountNow(m, systemd, runner); err != nil {
+			return err
+		}
+		if err := verifyRDMAMount(m, runner); err != nil {
+			return err
+		}
+		r.OK("mount %s proto=rdma", m.MountPoint)
+	}
+	return nil
+}
+
+func persistSystemdMount(m MountSpec, r *Reporter, runner Runner) error {
+	unitName := systemdMountUnitName(m.MountPoint)
+	unitPath := filepath.Join("/etc/systemd/system", unitName)
+	autoPath := strings.TrimSuffix(unitPath, ".mount") + ".automount"
+	unit := fmt.Sprintf(`[Unit]
+Description=storctl NFS-RDMA mount %s
+After=network-online.target storctl-qos.service
+Wants=network-online.target
+
+[Mount]
+What=%s:%s
+Where=%s
+Type=nfs
+Options=%s
+TimeoutSec=60
+
+[Install]
+WantedBy=multi-user.target
+`, m.Server, m.Server, m.Export, m.MountPoint, m.Options)
+	automount := fmt.Sprintf(`[Unit]
+Description=storctl automount %s
+After=network-online.target
+
+[Automount]
+Where=%s
+TimeoutIdleSec=300
+
+[Install]
+WantedBy=multi-user.target
+`, m.MountPoint, m.MountPoint)
+	if _, err := writeFileChanged(unitPath, []byte(unit), 0644); err != nil {
+		return err
+	}
+	if _, err := writeFileChanged(autoPath, []byte(automount), 0644); err != nil {
+		return err
+	}
+	if _, err := runner.Run("systemctl", "daemon-reload"); err != nil {
+		return err
+	}
+	if _, err := runner.Run("systemctl", "enable", filepath.Base(autoPath)); err != nil {
+		return err
+	}
+	r.OK("mount persistence %s", filepath.Base(autoPath))
+	return nil
+}
+
+func persistFstabMount(m MountSpec, r *Reporter) error {
+	line := fmt.Sprintf("%s:%s %s nfs %s 0 0", m.Server, m.Export, m.MountPoint, m.Options)
+	path := "/etc/fstab"
+	data, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	lines := []string{}
+	found := false
+	for _, old := range strings.Split(string(data), "\n") {
+		if strings.TrimSpace(old) == "" {
+			continue
+		}
+		fields := strings.Fields(old)
+		if len(fields) >= 2 && fields[1] == m.MountPoint {
+			if old == line {
+				found = true
+				lines = append(lines, old)
+			}
+			continue
+		}
+		lines = append(lines, old)
+	}
+	if !found {
+		lines = append(lines, line)
+	}
+	out := strings.Join(lines, "\n") + "\n"
+	changed, err := writeFileChanged(path, []byte(out), 0644)
+	if err != nil {
+		return err
+	}
+	if changed {
+		r.OK("mount persistence fstab %s", m.MountPoint)
+	} else {
+		r.Skip("mount persistence fstab %s", m.MountPoint)
+	}
+	return nil
+}
+
+func mountNow(m MountSpec, systemd bool, runner Runner) error {
+	if systemd {
+		unit := strings.TrimSuffix(systemdMountUnitName(m.MountPoint), ".mount") + ".automount"
+		if _, err := runner.Run("systemctl", "start", unit); err != nil {
+			return err
+		}
+	}
+	if _, err := runner.Run("findmnt", "-n", "-T", m.MountPoint); err == nil {
+		return nil
+	}
+	_, err := runner.Run("mount", "-t", "nfs", "-o", m.Options, m.Server+":"+m.Export, m.MountPoint)
+	return err
+}
+
+func verifyRDMAMount(m MountSpec, runner Runner) error {
+	if runner.Exists("findmnt") {
+		out, err := runner.Run("findmnt", "-n", "-T", m.MountPoint, "-o", "FSTYPE,OPTIONS")
+		if err == nil && strings.Contains(out, "nfs") && strings.Contains(out, "proto=rdma") {
+			return nil
+		}
+	}
+	if runner.Exists("nfsstat") {
+		out, err := runner.Run("nfsstat", "-m")
+		if err == nil && strings.Contains(out, m.MountPoint) && strings.Contains(out, "proto=rdma") {
+			return nil
+		}
+	}
+	return fmt.Errorf("nfsstat/findmnt does not show %s as proto=rdma", m.MountPoint)
+}
+
+func systemdMountUnitName(mountPoint string) string {
+	clean := filepath.Clean(mountPoint)
+	clean = strings.TrimPrefix(clean, "/")
+	if clean == "" || clean == "." {
+		return "-.mount"
+	}
+	re := regexp.MustCompile(`[^A-Za-z0-9_.-]+`)
+	clean = re.ReplaceAllString(clean, "-")
+	clean = strings.ReplaceAll(clean, "/", "-")
+	return clean + ".mount"
+}
