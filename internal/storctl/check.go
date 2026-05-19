@@ -95,7 +95,7 @@ func checkMountState(state State, r *Reporter, runner Runner) {
 		return
 	}
 	for _, m := range state.Mounts {
-		out, err := runner.Run("findmnt", "-n", "-T", m.MountPoint, "-o", "FSTYPE,OPTIONS")
+		out, err := runner.Run("findmnt", "-n", "--mountpoint", m.MountPoint, "-o", "FSTYPE,OPTIONS")
 		if err != nil {
 			r.Warn("mount %s missing", m.MountPoint)
 			continue

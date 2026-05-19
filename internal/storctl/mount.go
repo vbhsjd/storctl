@@ -124,11 +124,11 @@ func mountNow(m MountSpec, systemd bool, r *Reporter, runner Runner) error {
 		if _, err := runner.Run("systemctl", "start", unit); err != nil {
 			r.Warn("automount start failed for %s: %v", m.MountPoint, err)
 			r.Warn("trying direct nfs mount for %s", m.MountPoint)
-		} else if _, err := runner.Run("findmnt", "-n", "-T", m.MountPoint); err == nil {
+		} else if isMountPoint(m.MountPoint, runner) {
 			return nil
 		}
 	}
-	if _, err := runner.Run("findmnt", "-n", "-T", m.MountPoint); err == nil {
+	if isMountPoint(m.MountPoint, runner) {
 		return nil
 	}
 	_, err := runner.Run("mount", "-t", "nfs", "-o", m.Options, m.Server+":"+m.Export, m.MountPoint)
@@ -136,10 +136,14 @@ func mountNow(m MountSpec, systemd bool, r *Reporter, runner Runner) error {
 }
 
 func verifyRDMAMount(m MountSpec, runner Runner) error {
+	details := []string{}
 	if runner.Exists("findmnt") {
-		out, err := runner.Run("findmnt", "-n", "-T", m.MountPoint, "-o", "FSTYPE,OPTIONS")
+		out, err := runner.Run("findmnt", "-n", "--mountpoint", m.MountPoint, "-o", "FSTYPE,OPTIONS")
 		if err == nil && strings.Contains(out, "nfs") && strings.Contains(out, "proto=rdma") {
 			return nil
+		}
+		if strings.TrimSpace(out) != "" {
+			details = append(details, "findmnt: "+strings.TrimSpace(out))
 		}
 	}
 	if runner.Exists("nfsstat") {
@@ -147,8 +151,23 @@ func verifyRDMAMount(m MountSpec, runner Runner) error {
 		if err == nil && strings.Contains(out, m.MountPoint) && strings.Contains(out, "proto=rdma") {
 			return nil
 		}
+		if strings.TrimSpace(out) != "" {
+			details = append(details, "nfsstat: "+strings.TrimSpace(out))
+		}
+	}
+	if len(details) > 0 {
+		return fmt.Errorf("nfsstat/findmnt does not show %s as proto=rdma; %s", m.MountPoint, strings.Join(details, " | "))
 	}
 	return fmt.Errorf("nfsstat/findmnt does not show %s as proto=rdma", m.MountPoint)
+}
+
+func isMountPoint(path string, runner Runner) bool {
+	if runner.Exists("findmnt") {
+		_, err := runner.Run("findmnt", "-n", "--mountpoint", path)
+		return err == nil
+	}
+	_, err := runner.Run("mountpoint", "-q", path)
+	return err == nil
 }
 
 func systemdMountUnitName(mountPoint string) string {
