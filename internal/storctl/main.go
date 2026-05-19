@@ -12,6 +12,16 @@ func Main(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	switch args[0] {
+	case "plan":
+		cfg, err := parsePlan(args[1:])
+		if err != nil {
+			r.Fail("args", err.Error(), "run: storctl help")
+			return 2
+		}
+		if err := Plan(cfg, r); err != nil {
+			return 1
+		}
+		return 0
 	case "apply":
 		cfg, err := parseApply(args[1:])
 		if err != nil {
@@ -42,11 +52,16 @@ func printHelp(w io.Writer) {
 	fmt.Fprint(w, `storctl - join a lab host to NFS-RDMA storage
 
 usage:
+  storctl plan --profile NAME --nic NIC [flags]
   storctl apply --nic NIC --vlan-id ID --data-ip CIDR --gateway IP --mount SERVER:/EXPORT:/MOUNT[:OPTS] [flags]
+  storctl apply --profile NAME --nic NIC [flags]
   storctl check
   storctl help
 
 common flags:
+  --profile NAME                 load profile from storctl-profiles.json
+  --profile-file PATH            override profile file path
+  --mgmt-ip IP                   management IP for profile data-ip derivation
   --nic-type auto|cx7|1823      default: auto
   --route-table ID              default: 5000
   --mtu MTU                     default: 5500
@@ -62,5 +77,7 @@ example:
     --artifact-dir /root/storage_pkgs \
     --mount 172.27.0.50:/export/a:/mnt/a \
     --mount 172.27.0.51:/export/b:/mnt/b
+
+  storctl plan --profile c4 --nic enp23s0f1 --mgmt-ip 80.5.17.113
 `)
 }

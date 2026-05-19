@@ -1,0 +1,27 @@
+{
+  "profiles": {
+    "c4": {
+      "vlan_id": 172,
+      "gateway": "172.27.0.1",
+      "prefix": 18,
+      "route_table": 5000,
+      "mtu": 5500,
+      "artifact_dir": "/root/storage_pkgs",
+      "third_octet_map": {
+        "17": 4
+      },
+      "mounts": [
+        {
+          "server": "172.27.1.1",
+          "export": "/Share",
+          "mount_point": "/mnt/share"
+        },
+        {
+          "server": "172.27.1.1",
+          "export": "/Weight",
+          "mount_point": "/mnt/weight"
+        }
+      ]
+    }
+  }
+}

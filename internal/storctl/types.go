@@ -38,6 +38,22 @@ type MountSpec struct {
 	Options    string
 }
 
+type parseMode string
+
+const (
+	parseModeApply parseMode = "apply"
+	parseModePlan  parseMode = "plan"
+)
+
+type configFlags struct {
+	Config
+	Profile     string
+	ProfileFile string
+	MgmtIP      string
+	Mounts      mountList
+	seen        map[string]bool
+}
+
 type mountList []MountSpec
 
 func (m *mountList) String() string {
@@ -121,33 +137,62 @@ func mergeNFSOptions(base, extra string) string {
 }
 
 func parseApply(args []string) (Config, error) {
-	var mounts mountList
-	cfg := Config{
-		NICType:     "auto",
-		MTU:         defaultMTU,
-		RouteTable:  defaultRouteTable,
-		StateDir:    "/var/lib/storctl",
-		ArtifactDir: "/root/storage_pkgs",
-	}
-	fs := flag.NewFlagSet("apply", flag.ContinueOnError)
-	fs.StringVar(&cfg.NIC, "nic", "", "physical NIC name")
-	fs.StringVar(&cfg.NICType, "nic-type", "auto", "nic type: auto, cx7, 1823")
-	fs.IntVar(&cfg.VLANID, "vlan-id", 0, "VLAN ID")
-	fs.StringVar(&cfg.DataCIDR, "data-ip", "", "data IP CIDR, for example 172.27.1.123/18")
-	fs.StringVar(&cfg.Gateway, "gateway", "", "VLAN gateway")
-	fs.IntVar(&cfg.RouteTable, "route-table", defaultRouteTable, "routing table id")
-	fs.IntVar(&cfg.MTU, "mtu", defaultMTU, "MTU")
-	fs.StringVar(&cfg.ArtifactDir, "artifact-dir", cfg.ArtifactDir, "local artifact directory")
-	fs.StringVar(&cfg.Proxy, "proxy", "", "HTTP/HTTPS proxy for package manager commands")
-	fs.StringVar(&cfg.NoProxy, "no-proxy", "", "NO_PROXY value for package manager commands")
-	fs.BoolVar(&cfg.UpgradeFirmware, "upgrade-firmware", false, "upgrade NIC firmware")
-	fs.StringVar(&cfg.StateDir, "state-dir", cfg.StateDir, "state directory")
-	fs.Var(&mounts, "mount", "NFS mount: server:/export:/mount[:opts], repeatable")
-	if err := fs.Parse(args); err != nil {
+	return parseConfig(args, parseModeApply)
+}
+
+func parsePlan(args []string) (Config, error) {
+	return parseConfig(args, parseModePlan)
+}
+
+func parseConfig(args []string, mode parseMode) (Config, error) {
+	flags, err := parseConfigFlags(string(mode), args)
+	if err != nil {
 		return Config{}, err
 	}
-	cfg.Mounts = mounts
+	cfg, err := resolveConfig(flags)
+	if err != nil {
+		return Config{}, err
+	}
 	return cfg, cfg.Validate()
+}
+
+func parseConfigFlags(name string, args []string) (configFlags, error) {
+	var mounts mountList
+	flags := configFlags{
+		Config: Config{
+			NICType:     "auto",
+			MTU:         defaultMTU,
+			RouteTable:  defaultRouteTable,
+			StateDir:    "/var/lib/storctl",
+			ArtifactDir: "/root/storage_pkgs",
+		},
+	}
+	fs := flag.NewFlagSet(name, flag.ContinueOnError)
+	fs.StringVar(&flags.Profile, "profile", "", "profile name")
+	fs.StringVar(&flags.ProfileFile, "profile-file", "", "profile JSON path")
+	fs.StringVar(&flags.MgmtIP, "mgmt-ip", "", "management IP used to derive data IP")
+	fs.StringVar(&flags.NIC, "nic", "", "physical NIC name")
+	fs.StringVar(&flags.NICType, "nic-type", "auto", "nic type: auto, cx7, 1823")
+	fs.IntVar(&flags.VLANID, "vlan-id", 0, "VLAN ID")
+	fs.StringVar(&flags.DataCIDR, "data-ip", "", "data IP CIDR, for example 172.27.1.123/18")
+	fs.StringVar(&flags.Gateway, "gateway", "", "VLAN gateway")
+	fs.IntVar(&flags.RouteTable, "route-table", defaultRouteTable, "routing table id")
+	fs.IntVar(&flags.MTU, "mtu", defaultMTU, "MTU")
+	fs.StringVar(&flags.ArtifactDir, "artifact-dir", flags.ArtifactDir, "local artifact directory")
+	fs.StringVar(&flags.Proxy, "proxy", "", "HTTP/HTTPS proxy for package manager commands")
+	fs.StringVar(&flags.NoProxy, "no-proxy", "", "NO_PROXY value for package manager commands")
+	fs.BoolVar(&flags.UpgradeFirmware, "upgrade-firmware", false, "upgrade NIC firmware")
+	fs.StringVar(&flags.StateDir, "state-dir", flags.StateDir, "state directory")
+	fs.Var(&mounts, "mount", "NFS mount: server:/export:/mount[:opts], repeatable")
+	if err := fs.Parse(args); err != nil {
+		return configFlags{}, err
+	}
+	flags.Mounts = mounts
+	flags.seen = map[string]bool{}
+	fs.Visit(func(f *flag.Flag) {
+		flags.seen[f.Name] = true
+	})
+	return flags, nil
 }
 
 func (c Config) Validate() error {
@@ -180,6 +225,17 @@ func (c Config) Validate() error {
 	}
 	if len(c.Mounts) == 0 {
 		return errors.New("at least one --mount is required")
+	}
+	for _, m := range c.Mounts {
+		if m.Server == "" || m.Export == "" || m.MountPoint == "" {
+			return errors.New("mount fields can not be empty")
+		}
+		if !strings.HasPrefix(m.Export, "/") {
+			return errors.New("mount export must start with /")
+		}
+		if !strings.HasPrefix(m.MountPoint, "/") {
+			return errors.New("mount point must start with /")
+		}
 	}
 	return nil
 }

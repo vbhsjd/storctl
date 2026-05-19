@@ -1,5 +1,5 @@
 /storctl
-/storctl-*
+/storctl-linux-*
 *.zip
 *.tar.gz
 .DS_Store
