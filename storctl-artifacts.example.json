@@ -1,0 +1,31 @@
+{
+  "artifacts": [
+    {
+      "os_id": "openEuler",
+      "os_version_prefix": "22.03",
+      "arch": "aarch64",
+      "nic_type": "cx7",
+      "file": "MLNX_OFED_LINUX-5.8-1.1.2.1-openeuler22.03-aarch64.tgz",
+      "sha256": "replace-with-sha256",
+      "requires_repo": false
+    },
+    {
+      "os_id": "openEuler",
+      "os_version_prefix": "22.03",
+      "arch": "aarch64",
+      "nic_type": "1823",
+      "file": "nic_1823-openeuler22.03-aarch64.tar.gz",
+      "sha256": "replace-with-sha256",
+      "requires_repo": false
+    },
+    {
+      "os_id": "openEuler",
+      "os_version_prefix": "24.03",
+      "arch": "aarch64",
+      "nic_type": "cx7",
+      "file": "doca-host-3.3.0-088000_26.01_openeuler2403.aarch64.rpm",
+      "sha256": "replace-with-sha256",
+      "requires_repo": true
+    }
+  ]
+}

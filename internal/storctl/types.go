@@ -13,22 +13,24 @@ const (
 	defaultMTU        = 5500
 	defaultRouteTable = 5000
 	defaultNFSOptions = "vers=4.1,proto=rdma,port=20049,rsize=1048576,wsize=1048576,hard,noatime"
+	defaultTCPOptions = "vers=4.1,proto=tcp,rsize=1048576,wsize=1048576,hard,noatime"
 )
 
 type Config struct {
-	NIC             string
-	NICType         string
-	VLANID          int
-	DataCIDR        string
-	Gateway         string
-	RouteTable      int
-	MTU             int
-	ArtifactDir     string
-	Proxy           string
-	NoProxy         string
-	UpgradeFirmware bool
-	Mounts          []MountSpec
-	StateDir        string
+	NIC              string
+	NICType          string
+	VLANID           int
+	DataCIDR         string
+	Gateway          string
+	RouteTable       int
+	MTU              int
+	ArtifactDir      string
+	Proxy            string
+	NoProxy          string
+	UpgradeFirmware  bool
+	AllowTCPFallback bool
+	Mounts           []MountSpec
+	StateDir         string
 }
 
 type MountSpec struct {
@@ -182,6 +184,7 @@ func parseConfigFlags(name string, args []string) (configFlags, error) {
 	fs.StringVar(&flags.Proxy, "proxy", "", "HTTP/HTTPS proxy for package manager commands")
 	fs.StringVar(&flags.NoProxy, "no-proxy", "", "NO_PROXY value for package manager commands")
 	fs.BoolVar(&flags.UpgradeFirmware, "upgrade-firmware", false, "upgrade NIC firmware")
+	fs.BoolVar(&flags.AllowTCPFallback, "allow-tcp-fallback", false, "mount TCP NFS when NFS-RDMA is unavailable")
 	fs.StringVar(&flags.StateDir, "state-dir", flags.StateDir, "state directory")
 	fs.Var(&mounts, "mount", "NFS mount: server:/export:/mount[:opts], repeatable")
 	if err := fs.Parse(args); err != nil {
@@ -264,6 +267,27 @@ func parseCheck(args []string) (Config, error) {
 	}
 	if fs.NArg() != 0 {
 		return Config{}, fmt.Errorf("unexpected argument: %s", fs.Arg(0))
+	}
+	return cfg, nil
+}
+
+func parseInstallDriver(args []string) (InstallDriverConfig, error) {
+	cfg := InstallDriverConfig{ArtifactDir: "/root/storage_pkgs"}
+	fs := flag.NewFlagSet("install-driver", flag.ContinueOnError)
+	fs.StringVar(&cfg.NICType, "nic-type", "", "nic type: cx7 or 1823")
+	fs.StringVar(&cfg.ArtifactDir, "artifact-dir", cfg.ArtifactDir, "local artifact directory")
+	fs.StringVar(&cfg.Proxy, "proxy", "", "HTTP/HTTPS proxy for package manager commands")
+	fs.StringVar(&cfg.NoProxy, "no-proxy", "", "NO_PROXY value for package manager commands")
+	fs.BoolVar(&cfg.UpgradeFirmware, "upgrade-firmware", false, "upgrade NIC firmware")
+	fs.BoolVar(&cfg.AllowRepo, "allow-repo", false, "allow artifacts that require a configured dnf repo")
+	if err := fs.Parse(args); err != nil {
+		return InstallDriverConfig{}, err
+	}
+	if cfg.NICType != "cx7" && cfg.NICType != "1823" {
+		return InstallDriverConfig{}, errors.New("--nic-type must be cx7 or 1823")
+	}
+	if cfg.ArtifactDir == "" {
+		return InstallDriverConfig{}, errors.New("--artifact-dir is required")
 	}
 	return cfg, nil
 }

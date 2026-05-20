@@ -12,6 +12,9 @@ func Check(cfg Config, r *Reporter, runner Runner) error {
 		r.Warn("state not found: %s/state.json", cfg.StateDir)
 	} else {
 		r.OK("state %s %s", state.NIC, state.VLAN)
+		if state.Degraded {
+			r.Warn("degraded tcp-fallback: %s", state.DegradedReason)
+		}
 	}
 
 	osID, osVersion, err := detectOS()

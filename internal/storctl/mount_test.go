@@ -64,6 +64,38 @@ func TestRequireRDMAClientAcceptsRDMALink(t *testing.T) {
 	}
 }
 
+func TestConfigureMountsDoesNotFallbackToTCPByDefault(t *testing.T) {
+	r := &fakeRunner{
+		exists: map[string]bool{"rdma": true},
+		outputs: map[string]string{
+			"rdma link": "",
+		},
+	}
+	cfg := Config{
+		Mounts: []MountSpec{{
+			Server:     "172.27.1.1",
+			Export:     "/Share",
+			MountPoint: t.TempDir(),
+			Options:    defaultNFSOptions,
+		}},
+	}
+	var out, stderr strings.Builder
+	_, err := configureMounts(cfg, false, NewReporter(&out, &stderr), r)
+	if err == nil || !strings.Contains(err.Error(), "rdma link is empty") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(out.String(), "proto=tcp") || strings.Contains(stderr.String(), "proto=tcp") {
+		t.Fatalf("unexpected tcp fallback output: stdout=%q stderr=%q", out.String(), stderr.String())
+	}
+}
+
+func TestTCPFallbackOptionsUseTCP(t *testing.T) {
+	got := tcpFallbackOptions(defaultNFSOptions)
+	if !strings.Contains(got, "proto=tcp") || strings.Contains(got, "proto=rdma") {
+		t.Fatalf("unexpected tcp options: %s", got)
+	}
+}
+
 type fakeRunner struct {
 	exists  map[string]bool
 	outputs map[string]string

@@ -8,31 +8,105 @@ import (
 	"strings"
 )
 
-func configureMounts(cfg Config, systemd bool, r *Reporter, runner Runner) error {
+type MountResult struct {
+	Degraded       bool
+	DegradedReason string
+}
+
+func configureMounts(cfg Config, systemd bool, r *Reporter, runner Runner) (MountResult, error) {
 	if err := requireRDMAClient(runner); err != nil {
-		return err
+		if !cfg.AllowTCPFallback {
+			return MountResult{}, err
+		}
+		reason := err.Error()
+		r.Warn("rdma unavailable, using explicit tcp fallback: %s", reason)
+		if err := configureTCPFallbackMounts(cfg, systemd, r, runner, reason); err != nil {
+			return MountResult{}, err
+		}
+		return MountResult{Degraded: true, DegradedReason: reason}, nil
 	}
+	result := MountResult{}
+	for _, m := range cfg.Mounts {
+		if err := os.MkdirAll(m.MountPoint, 0755); err != nil {
+			return MountResult{}, err
+		}
+		if systemd {
+			if err := persistSystemdMount(m, r, runner); err != nil {
+				return MountResult{}, err
+			}
+		} else {
+			if err := persistFstabMount(m, r); err != nil {
+				return MountResult{}, err
+			}
+		}
+		if err := mountNow(m, systemd, r, runner); err != nil {
+			if !cfg.AllowTCPFallback {
+				return MountResult{}, err
+			}
+			reason := err.Error()
+			r.Warn("rdma mount failed, using explicit tcp fallback for %s", m.MountPoint)
+			if err := configureTCPFallbackMount(m, systemd, r, runner); err != nil {
+				return MountResult{}, err
+			}
+			result.Degraded = true
+			result.DegradedReason = appendDegradedReason(result.DegradedReason, reason)
+			continue
+		}
+		if err := verifyRDMAMount(m, runner); err != nil {
+			if !cfg.AllowTCPFallback {
+				return MountResult{}, err
+			}
+			reason := err.Error()
+			r.Warn("rdma verify failed, using explicit tcp fallback for %s", m.MountPoint)
+			if err := configureTCPFallbackMount(m, systemd, r, runner); err != nil {
+				return MountResult{}, err
+			}
+			result.Degraded = true
+			result.DegradedReason = appendDegradedReason(result.DegradedReason, reason)
+			continue
+		}
+		r.OK("mount %s proto=rdma", m.MountPoint)
+	}
+	return result, nil
+}
+
+func configureTCPFallbackMounts(cfg Config, systemd bool, r *Reporter, runner Runner, reason string) error {
 	for _, m := range cfg.Mounts {
 		if err := os.MkdirAll(m.MountPoint, 0755); err != nil {
 			return err
 		}
-		if systemd {
-			if err := persistSystemdMount(m, r, runner); err != nil {
-				return err
-			}
-		} else {
-			if err := persistFstabMount(m, r); err != nil {
-				return err
-			}
-		}
-		if err := mountNow(m, systemd, r, runner); err != nil {
+		if err := configureTCPFallbackMount(m, systemd, r, runner); err != nil {
 			return err
 		}
-		if err := verifyRDMAMount(m, runner); err != nil {
-			return err
-		}
-		r.OK("mount %s proto=rdma", m.MountPoint)
 	}
+	return nil
+}
+
+func configureTCPFallbackMount(m MountSpec, systemd bool, r *Reporter, runner Runner) error {
+	tcpMount := m
+	tcpMount.Options = tcpFallbackOptions(m.Options)
+	if systemd {
+		if err := persistSystemdMount(tcpMount, r, runner); err != nil {
+			return err
+		}
+	} else {
+		if err := persistFstabMount(tcpMount, r); err != nil {
+			return err
+		}
+	}
+	if isMountPoint(tcpMount.MountPoint, runner) {
+		if ok, _ := mountIsTCP(tcpMount, runner); !ok {
+			if err := unmount(tcpMount.MountPoint, runner); err != nil {
+				return err
+			}
+		}
+	}
+	if !isMountPoint(tcpMount.MountPoint, runner) {
+		if _, err := runner.Run("mount", "-t", "nfs", "-o", tcpMount.Options, tcpMount.Server+":"+tcpMount.Export, tcpMount.MountPoint); err != nil {
+			return err
+		}
+	}
+	r.Warn("mount %s proto=tcp degraded", tcpMount.MountPoint)
 	return nil
 }
 
@@ -183,6 +257,33 @@ func mountIsRDMA(m MountSpec, runner Runner) (bool, string) {
 		}
 	}
 	return false, ""
+}
+
+func mountIsTCP(m MountSpec, runner Runner) (bool, string) {
+	if runner.Exists("findmnt") {
+		out, err := runner.Run("findmnt", "-n", "--mountpoint", m.MountPoint, "-o", "FSTYPE,OPTIONS")
+		if err == nil && strings.Contains(out, "nfs") && strings.Contains(out, "proto=tcp") {
+			return true, ""
+		}
+		if strings.TrimSpace(out) != "" {
+			return false, "findmnt: " + strings.TrimSpace(out)
+		}
+	}
+	return false, ""
+}
+
+func tcpFallbackOptions(_ string) string {
+	return defaultTCPOptions
+}
+
+func appendDegradedReason(existing, next string) string {
+	if existing == "" {
+		return next
+	}
+	if strings.Contains(existing, next) {
+		return existing
+	}
+	return existing + "; " + next
 }
 
 func isMountPoint(path string, runner Runner) bool {

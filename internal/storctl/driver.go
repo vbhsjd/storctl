@@ -29,29 +29,102 @@ func resolveNICType(cfg Config, runner Runner) (string, error) {
 	return "", fmt.Errorf("can not auto-detect NIC type")
 }
 
-func ensureDriver(cfg Config, nicType string, r *Reporter, runner Runner) (bool, error) {
+func ensureDriverReady(cfg Config, nicType string, r *Reporter, runner Runner) error {
 	switch nicType {
 	case "cx7":
-		return ensureCX7Driver(cfg, r, runner)
+		return ensureCX7DriverReady(r, runner)
 	case "1823":
-		return ensure1823Driver(cfg, r, runner)
+		return ensure1823DriverReady(r, runner)
 	default:
-		return false, fmt.Errorf("unsupported nic type %s", nicType)
+		return fmt.Errorf("unsupported nic type %s", nicType)
 	}
 }
 
-func ensureCX7Driver(cfg Config, r *Reporter, runner Runner) (bool, error) {
+func ensureCX7DriverReady(r *Reporter, runner Runner) error {
 	ready := runner.Exists("ibdev2netdev") && runner.Exists("mlnx_qos") && runner.Exists("cma_roce_tos")
 	if ready {
 		r.OK("driver mlx5 tools ready")
-		return false, nil
+		return nil
 	}
-	if pkg, err := findArtifact(cfg.ArtifactDir, "doca-host*.rpm"); err == nil {
-		return installDOCAHost(pkg, r, runner)
+	return fmt.Errorf("mlx5 tools not ready: need ibdev2netdev, mlnx_qos, and cma_roce_tos")
+}
+
+func ensure1823DriverReady(r *Reporter, runner Runner) error {
+	if !runner.Exists("hinicadm3") {
+		return fmt.Errorf("hinicadm3 not found")
 	}
-	pkg, err := findArtifact(cfg.ArtifactDir, "MLNX_OFED_LINUX-*.tgz", "IB_NIC-*.tgz")
+	if !runner.Exists("rdma") {
+		return fmt.Errorf("rdma command not found")
+	}
+	out, err := runner.Run("rdma", "link")
 	if err != nil {
-		return false, err
+		return err
+	}
+	if strings.TrimSpace(out) == "" {
+		return fmt.Errorf("rdma link is empty; 1823 RDMA driver is not ready")
+	}
+	r.OK("driver hinic tools ready")
+	return nil
+}
+
+type InstallDriverConfig struct {
+	NICType         string
+	ArtifactDir     string
+	Proxy           string
+	NoProxy         string
+	UpgradeFirmware bool
+	AllowRepo       bool
+}
+
+func InstallDriver(cfg InstallDriverConfig, r *Reporter, runner Runner) error {
+	if err := requireRoot(); err != nil {
+		r.Fail("permission", err.Error(), "run storctl as root")
+		return err
+	}
+	artifact, err := selectArtifact(cfg.ArtifactDir, cfg.NICType)
+	if err != nil {
+		r.Fail("artifact", err.Error(), "prepare "+cfg.ArtifactDir+"/storctl-artifacts.json and matching driver package")
+		return err
+	}
+	r.OK("artifact %s", artifact.File)
+	if artifact.RequiresRepo && !cfg.AllowRepo {
+		err := fmt.Errorf("%s requires a configured dnf repo; rerun with --allow-repo only when repo access is available", artifact.File)
+		r.Fail("artifact repo", err.Error(), "prefer a true offline tgz/rpm bundle for lab use")
+		return err
+	}
+	pkg := filepath.Join(cfg.ArtifactDir, artifact.File)
+	if artifact.SHA256 != "" {
+		if err := verifySHA256(pkg, artifact.SHA256); err != nil {
+			r.Fail("artifact sha256", err.Error(), "replace the artifact or update storctl-artifacts.json")
+			return err
+		}
+		r.OK("artifact sha256 verified")
+	}
+	var rebootRequired bool
+	switch cfg.NICType {
+	case "cx7":
+		rebootRequired, err = installCX7Artifact(pkg, artifact, r, runner)
+	case "1823":
+		rebootRequired, err = install1823Artifact(pkg, cfg.UpgradeFirmware, r, runner)
+	default:
+		err = fmt.Errorf("--nic-type must be cx7 or 1823")
+	}
+	if err != nil {
+		r.Fail("driver install", err.Error(), "check artifact package and OS/driver matrix")
+		return err
+	}
+	if rebootRequired {
+		r.Warn("reboot recommended: driver updated")
+	}
+	return nil
+}
+
+func installCX7Artifact(pkg string, artifact Artifact, r *Reporter, runner Runner) (bool, error) {
+	if strings.HasSuffix(pkg, ".rpm") || strings.Contains(filepath.Base(pkg), "doca-host") {
+		if !artifact.RequiresRepo {
+			return false, fmt.Errorf("rpm repo installer artifacts must set requires_repo=true")
+		}
+		return installDOCAHost(pkg, r, runner)
 	}
 	return installMLNXOFED(pkg, r, runner)
 }
@@ -97,8 +170,10 @@ func installMLNXOFED(pkg string, r *Reporter, runner Runner) (bool, error) {
 	if _, err := runner.Sh(cmd); err != nil {
 		return false, err
 	}
-	if _, err := runner.Run("dracut", "-f"); err != nil {
-		return true, err
+	if runner.Exists("dracut") {
+		if _, err := runner.Run("dracut", "-f"); err != nil {
+			return true, err
+		}
 	}
 	restartOpenIBD(runner)
 	r.OK("driver mlx5 installed")
@@ -113,22 +188,7 @@ func restartOpenIBD(runner Runner) {
 	_, _ = runner.Run("/etc/init.d/openibd", "restart")
 }
 
-func ensure1823Driver(cfg Config, r *Reporter, runner Runner) (bool, error) {
-	if runner.Exists("hinicadm3") {
-		r.OK("driver hinic tools ready")
-		if cfg.UpgradeFirmware {
-			if err := upgrade1823Firmware(runner); err != nil {
-				return false, err
-			}
-			r.OK("firmware 1823 upgraded")
-			return true, nil
-		}
-		return false, nil
-	}
-	pkg, err := findArtifact(cfg.ArtifactDir, "nic_1823.tar.gz", "hinic*.tar.gz")
-	if err != nil {
-		return false, err
-	}
+func install1823Artifact(pkg string, upgradeFirmware bool, r *Reporter, runner Runner) (bool, error) {
 	work := "/tmp/storctl-1823"
 	if _, err := runner.Run("rm", "-rf", work); err != nil {
 		return false, err
@@ -142,7 +202,7 @@ func ensure1823Driver(cfg Config, r *Reporter, runner Runner) (bool, error) {
 	if _, err := runner.Sh(fmt.Sprintf("cd %s/* && rpm -Uvh *.rpm", work)); err != nil {
 		return false, err
 	}
-	if cfg.UpgradeFirmware {
+	if upgradeFirmware {
 		if err := upgrade1823Firmware(runner); err != nil {
 			return true, err
 		}

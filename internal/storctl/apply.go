@@ -37,9 +37,8 @@ func Apply(cfg Config, r *Reporter, runner Runner) error {
 	}
 	r.OK("nic type %s", nicType)
 
-	rebootRequired, err := ensureDriver(cfg, nicType, r, runner)
-	if err != nil {
-		r.Fail("driver "+nicType, err.Error(), "check --artifact-dir and driver package for this OS")
+	if err := ensureDriverReady(cfg, nicType, r, runner); err != nil {
+		r.Fail("driver "+nicType, err.Error(), "run: storctl install-driver --nic-type "+nicType+" --artifact-dir "+cfg.ArtifactDir)
 		return err
 	}
 
@@ -53,18 +52,19 @@ func Apply(cfg Config, r *Reporter, runner Runner) error {
 	}
 
 	systemd := hasSystemd(runner)
-	if err := configureMounts(cfg, systemd, r, runner); err != nil {
+	mountResult, err := configureMounts(cfg, systemd, r, runner)
+	if err != nil {
 		r.Fail("rdma mount", err.Error(), "check server port 20049 and run: rdma link")
 		return err
 	}
 
-	if err := saveState(cfg, nicType, rebootRequired, systemd); err != nil {
+	if err := saveState(cfg, nicType, false, systemd, mountResult.Degraded, mountResult.DegradedReason); err != nil {
 		r.Fail("state", err.Error(), "check /var/lib/storctl permissions")
 		return err
 	}
 	r.OK("state %s/state.json", cfg.StateDir)
-	if rebootRequired {
-		r.Warn("reboot recommended: driver updated")
+	if mountResult.Degraded {
+		r.Warn("degraded tcp-fallback: %s", mountResult.DegradedReason)
 	}
 	return nil
 }

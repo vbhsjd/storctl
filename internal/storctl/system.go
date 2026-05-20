@@ -22,6 +22,8 @@ type State struct {
 	Mounts          []MountSpec `json:"mounts"`
 	RebootRequired  bool        `json:"reboot_required"`
 	SystemdDetected bool        `json:"systemd_detected"`
+	Degraded        bool        `json:"degraded"`
+	DegradedReason  string      `json:"degraded_reason,omitempty"`
 }
 
 func requireRoot() error {
@@ -97,7 +99,7 @@ func writeFileChanged(path string, data []byte, mode os.FileMode) (bool, error) 
 	return true, nil
 }
 
-func saveState(cfg Config, nicType string, rebootRequired, systemd bool) error {
+func saveState(cfg Config, nicType string, rebootRequired, systemd bool, degraded bool, degradedReason string) error {
 	state := State{
 		UpdatedAt:       time.Now(),
 		NIC:             cfg.NIC,
@@ -110,6 +112,8 @@ func saveState(cfg Config, nicType string, rebootRequired, systemd bool) error {
 		Mounts:          cfg.Mounts,
 		RebootRequired:  rebootRequired,
 		SystemdDetected: systemd,
+		Degraded:        degraded,
+		DegradedReason:  degradedReason,
 	}
 	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {

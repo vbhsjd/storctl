@@ -12,6 +12,16 @@ func Main(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	switch args[0] {
+	case "install-driver":
+		cfg, err := parseInstallDriver(args[1:])
+		if err != nil {
+			r.Fail("args", err.Error(), "run: storctl help")
+			return 2
+		}
+		if err := InstallDriver(cfg, r, NewOSRunner(cfg.Proxy, cfg.NoProxy)); err != nil {
+			return 1
+		}
+		return 0
 	case "plan":
 		cfg, err := parsePlan(args[1:])
 		if err != nil {
@@ -52,6 +62,7 @@ func printHelp(w io.Writer) {
 	fmt.Fprint(w, `storctl - join a lab host to NFS-RDMA storage
 
 usage:
+  storctl install-driver --nic-type cx7|1823 --artifact-dir DIR
   storctl plan --profile NAME --nic NIC [flags]
   storctl apply --nic NIC --vlan-id ID --data-ip CIDR --gateway IP --mount SERVER:/EXPORT:/MOUNT[:OPTS] [flags]
   storctl apply --profile NAME --nic NIC [flags]
@@ -66,12 +77,16 @@ common flags:
   --route-table ID              default: 5000
   --mtu MTU                     default: 5500
   --artifact-dir DIR            default: /root/storage_pkgs
-  --proxy URL                   proxy for yum/dnf commands only
-  --no-proxy LIST               no_proxy for yum/dnf commands only
-  --upgrade-firmware            firmware upgrade is off unless this is set
+  --proxy URL                   proxy for package commands only
+  --no-proxy LIST               no_proxy for package commands only
+  --upgrade-firmware            install-driver only; firmware upgrade is off unless this is set
+  --allow-repo                  install-driver only; permit artifacts that need a configured dnf repo
+  --allow-tcp-fallback          explicitly mount TCP NFS when RDMA is unavailable
   --mount SPEC                  repeatable; default opts are NFS-RDMA
 
 example:
+  storctl install-driver --nic-type cx7 --artifact-dir /root/storage_pkgs
+
   storctl apply --nic enp189s0f0np0 --nic-type auto --vlan-id 3001 \
     --data-ip 172.27.1.123/18 --gateway 172.27.0.1 --route-table 5000 \
     --artifact-dir /root/storage_pkgs \

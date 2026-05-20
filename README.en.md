@@ -9,6 +9,11 @@ NFS-RDMA mounts, mount persistence, and a small state file for later checks. It
 is designed to be copied to one host and run directly, or called by Ansible for
 batch onboarding.
 
+The default assumption is an offline or weakly connected lab. `apply` only
+checks whether the driver is ready; it does not install drivers or fetch
+packages. Pre-distribute artifacts with Ansible/scp, then run
+`storctl install-driver` explicitly.
+
 ## Quick Start
 
 Explicit single-host mode:
@@ -39,6 +44,13 @@ Check the current host:
 storctl check
 ```
 
+Install a local driver artifact:
+
+```bash
+storctl install-driver --nic-type cx7 --artifact-dir /root/storage_pkgs
+storctl install-driver --nic-type 1823 --artifact-dir /root/storage_pkgs
+```
+
 ## Workflow
 
 ```mermaid
@@ -47,13 +59,15 @@ flowchart TD
   B --> C["Detect management IP"]
   C --> D["Derive data IP"]
   D --> E["Merge CLI overrides"]
-  E --> F["Check OS/NIC/driver"]
-  F --> G["Configure NetworkManager VLAN"]
-  G --> H["Apply QoS"]
-  H --> I["Check RDMA client"]
-  I --> J["Persist mounts"]
-  J --> K["Mount NFS-RDMA"]
-  K --> L["Write state.json"]
+  E --> F["Check OS/NIC/driver readiness"]
+  F --> G{"Driver ready?"}
+  G -- "No" --> H["FAIL driver: run install-driver"]
+  G -- "Yes" --> I["Configure NetworkManager VLAN"]
+  I --> J["Apply QoS"]
+  J --> K["Check RDMA client"]
+  K --> L["Persist mounts"]
+  L --> M["Mount NFS-RDMA"]
+  M --> N["Write state.json"]
 ```
 
 `plan` stops after rendering the final configuration. It never changes the
@@ -109,7 +123,9 @@ Recommended Ansible shape:
 
 ```bash
 ansible all -m copy -a "src=storctl-linux-arm64 dest=/usr/local/bin/storctl mode=0755"
+ansible all -m copy -a "src=storage_pkgs/ dest=/root/storage_pkgs/"
 ansible all -m copy -a "src=storctl-profiles.json dest=/etc/storctl/profiles.json"
+ansible all -m shell -a "storctl install-driver --nic-type {{ nic_type }} --artifact-dir /root/storage_pkgs"
 ansible all -m shell -a "storctl plan --profile c4 --nic {{ storage_nic }} --mgmt-ip {{ ansible_host }}"
 ansible all -m shell -a "storctl apply --profile c4 --nic {{ storage_nic }} --mgmt-ip {{ ansible_host }}"
 ```
@@ -129,24 +145,91 @@ go build ./cmd/storctl
 GOOS=linux GOARCH=arm64 go build -o storctl-linux-arm64 ./cmd/storctl
 ```
 
-## Driver Artifacts
+## Offline Driver Artifacts
 
-Artifacts are read from `--artifact-dir`; `storctl` does not fetch public
-packages by itself.
+Artifacts are read from `--artifact-dir`. `storctl apply` does not install
+drivers and does not access the public internet. Driver installation must be
+explicit through `storctl install-driver`.
 
-- CX7 supports `doca-host*.rpm`, then installs `doca-ofed` through the host's
-  configured `dnf` repos.
-- CX7 also supports legacy `MLNX_OFED_LINUX-*.tgz` and `IB_NIC-*.tgz`.
-- 1823 supports `nic_1823.tar.gz` or `hinic*.tar.gz`.
-- Firmware upgrade is disabled unless `--upgrade-firmware` is set.
+The directory must include a manifest:
 
-For DOCA-Host:
+```text
+/root/storage_pkgs/
+  storctl-artifacts.json
+  MLNX_OFED_LINUX-5.8-1.1.2.1-openeuler22.03-aarch64.tgz
+  nic_1823-openeuler22.03-aarch64.tar.gz
+```
+
+Example `storctl-artifacts.json`:
+
+```json
+{
+  "artifacts": [
+    {
+      "os_id": "openEuler",
+      "os_version_prefix": "22.03",
+      "arch": "aarch64",
+      "nic_type": "cx7",
+      "file": "MLNX_OFED_LINUX-5.8-1.1.2.1-openeuler22.03-aarch64.tgz",
+      "sha256": "replace-with-sha256",
+      "requires_repo": false
+    },
+    {
+      "os_id": "openEuler",
+      "os_version_prefix": "22.03",
+      "arch": "aarch64",
+      "nic_type": "1823",
+      "file": "nic_1823-openeuler22.03-aarch64.tar.gz",
+      "sha256": "replace-with-sha256",
+      "requires_repo": false
+    }
+  ]
+}
+```
+
+This repository also includes [storctl-artifacts.example.json](storctl-artifacts.example.json) as a template.
+
+Generate checksums:
 
 ```bash
-wget https://www.mellanox.com/downloads/DOCA/DOCA_v3.3.0/host/doca-host-3.3.0-088000_26.01_openeuler2403.aarch64.rpm
-mkdir -p /root/storage_pkgs
-cp doca-host-3.3.0-088000_26.01_openeuler2403.aarch64.rpm /root/storage_pkgs/
+sha256sum /root/storage_pkgs/*.tgz /root/storage_pkgs/*.tar.gz
 ```
+
+- CX7 prefers true offline `MLNX_OFED_LINUX-*.tgz` or `IB_NIC-*.tgz` bundles.
+- 1823 supports `nic_1823.tar.gz` or `hinic*.tar.gz`.
+- Firmware upgrade is disabled unless `--upgrade-firmware` is set.
+- `doca-host*.rpm` is a repo installer. It is allowed only when the manifest
+  sets `"requires_repo": true` and the command includes `--allow-repo`:
+
+```bash
+storctl install-driver --nic-type cx7 --artifact-dir /root/storage_pkgs --allow-repo
+```
+
+Keep the OS/driver matrix in the team wiki. Humans read the wiki; `storctl`
+checks the manifest:
+
+| OS | Arch | CX7 artifact | 1823 artifact | Notes |
+| --- | --- | --- | --- | --- |
+| openEuler 22.03 | aarch64 | `MLNX_OFED_LINUX-*.tgz` | `nic_1823*.tar.gz` | Main path |
+| openEuler 23.x | aarch64 | To verify | To verify | Add an explicit manifest row |
+| openEuler 24.03 | aarch64 | Matching DOCA/MLNX package | To verify | Prefer true offline bundles |
+
+If DOCA Host is required, prepare an internal dnf repo first. `storctl` does
+not maintain cross-lab repositories.
+
+## TCP Fallback
+
+```bash
+storctl apply ... --allow-tcp-fallback
+```
+
+The default target is NFS-RDMA. If RDMA is unavailable, `apply` fails and keeps
+completed configuration; it does not silently switch to TCP.
+
+With `--allow-tcp-fallback`, `storctl` mounts TCP NFS, persists TCP options, and
+writes `degraded: true` to `/var/lib/storctl/state.json`. `storctl check` then
+prints `WARN degraded tcp-fallback`. This mode is for temporary service
+continuity, not performance sign-off.
 
 ## Troubleshooting
 
@@ -162,7 +245,8 @@ cp doca-host-3.3.0-088000_26.01_openeuler2403.aarch64.rpm /root/storage_pkgs/
 
 Mount is TCP instead of RDMA:
 
-- `storctl` remounts target paths when it finds `proto=tcp`.
+- By default, `storctl` remounts target paths when it finds `proto=tcp`.
+- If temporary degradation is acceptable, pass `--allow-tcp-fallback`.
 - Verify:
   ```bash
   findmnt --mountpoint /mnt/share -o TARGET,FSTYPE,SOURCE,OPTIONS
