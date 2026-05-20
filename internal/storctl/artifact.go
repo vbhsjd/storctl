@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 )
 
@@ -93,18 +94,117 @@ func artifactArch() string {
 }
 
 func verifySHA256(path, expected string) error {
-	file, err := os.Open(path)
+	got, err := sha256File(path)
 	if err != nil {
 		return err
+	}
+	if !strings.EqualFold(got, strings.TrimSpace(expected)) {
+		return fmt.Errorf("%s sha256 mismatch: got %s want %s", path, got, expected)
+	}
+	return nil
+}
+
+func sha256File(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
 	}
 	defer file.Close()
 	hash := sha256.New()
 	if _, err := io.Copy(hash, file); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+type ManifestGenerateConfig struct {
+	ArtifactDir     string
+	OSID            string
+	OSVersionPrefix string
+	Arch            string
+}
+
+func GenerateManifest(cfg ManifestGenerateConfig, out io.Writer, errw io.Writer) error {
+	entries, err := os.ReadDir(cfg.ArtifactDir)
+	if err != nil {
 		return err
 	}
-	got := hex.EncodeToString(hash.Sum(nil))
-	if !strings.EqualFold(got, strings.TrimSpace(expected)) {
-		return fmt.Errorf("%s sha256 mismatch: got %s want %s", path, got, expected)
+	manifest := ArtifactManifest{}
+	for _, entry := range entries {
+		if entry.IsDir() || entry.Name() == artifactManifestName {
+			continue
+		}
+		nicType, requiresRepo, ok := classifyArtifact(entry.Name())
+		if !ok {
+			fmt.Fprintf(errw, "WARN artifact ignored %s\n", entry.Name())
+			continue
+		}
+		sum, err := sha256File(filepath.Join(cfg.ArtifactDir, entry.Name()))
+		if err != nil {
+			return err
+		}
+		manifest.Artifacts = append(manifest.Artifacts, Artifact{
+			OSID:            cfg.OSID,
+			OSVersionPrefix: cfg.OSVersionPrefix,
+			Arch:            cfg.Arch,
+			NICType:         nicType,
+			File:            entry.Name(),
+			SHA256:          sum,
+			RequiresRepo:    requiresRepo,
+		})
+	}
+	sort.Slice(manifest.Artifacts, func(i, j int) bool {
+		return manifest.Artifacts[i].File < manifest.Artifacts[j].File
+	})
+	if len(manifest.Artifacts) == 0 {
+		return fmt.Errorf("no supported artifacts found in %s", cfg.ArtifactDir)
+	}
+	enc := json.NewEncoder(out)
+	enc.SetIndent("", "  ")
+	return enc.Encode(manifest)
+}
+
+func classifyArtifact(name string) (nicType string, requiresRepo bool, ok bool) {
+	low := strings.ToLower(name)
+	switch {
+	case strings.HasPrefix(low, "doca-host") && strings.HasSuffix(low, ".rpm"):
+		return "cx7", true, true
+	case strings.HasPrefix(low, "mlnx_ofed_linux-") || strings.HasPrefix(low, "ib_nic-"):
+		if strings.HasSuffix(low, ".tgz") || strings.HasSuffix(low, ".tar.gz") {
+			return "cx7", false, true
+		}
+	case strings.HasPrefix(low, "nic_1823") || strings.HasPrefix(low, "hinic"):
+		if strings.HasSuffix(low, ".tgz") || strings.HasSuffix(low, ".tar.gz") {
+			return "1823", false, true
+		}
+	}
+	return "", false, false
+}
+
+func ValidateArtifacts(dir string) error {
+	manifest, err := readArtifactManifest(filepath.Join(dir, artifactManifestName))
+	if err != nil {
+		return err
+	}
+	for _, artifact := range manifest.Artifacts {
+		if artifact.File == "" {
+			return fmt.Errorf("artifact file is required")
+		}
+		path := filepath.Join(dir, artifact.File)
+		if _, err := os.Stat(path); err != nil {
+			return fmt.Errorf("artifact file missing: %s", path)
+		}
+		if artifact.OSID == "" || artifact.OSVersionPrefix == "" || artifact.Arch == "" || artifact.NICType == "" {
+			return fmt.Errorf("artifact %s missing os_id/os_version_prefix/arch/nic_type", artifact.File)
+		}
+		if artifact.NICType != "cx7" && artifact.NICType != "1823" {
+			return fmt.Errorf("artifact %s has unsupported nic_type %s", artifact.File, artifact.NICType)
+		}
+		if artifact.SHA256 != "" {
+			if err := verifySHA256(path, artifact.SHA256); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }

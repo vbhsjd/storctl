@@ -19,11 +19,15 @@
   nic_1823-openeuler22.03-aarch64.tar.gz
 ```
 
-生成 sha256：
+生成 manifest：
 
 ```bash
-cd /root/storage_pkgs
-sha256sum *.tgz *.tar.gz *.rpm
+storctl generate-manifest \
+  --artifact-dir /root/storage_pkgs \
+  --os-id openEuler \
+  --os-version-prefix 22.03 \
+  --arch aarch64 > /root/storage_pkgs/storctl-artifacts.json
+storctl validate-artifacts --artifact-dir /root/storage_pkgs
 ```
 
 ## Manifest 字段
@@ -70,6 +74,7 @@ ansible all -m copy -a "src=storctl-profiles.json dest=/etc/storctl/profiles.jso
 ansible all -m shell -a "storctl install-driver --nic-type {{ nic_type }} --artifact-dir /root/storage_pkgs"
 ansible all -m shell -a "storctl plan --profile {{ storage_profile }} --nic {{ storage_nic }} --mgmt-ip {{ ansible_host }}"
 ansible all -m shell -a "storctl apply --profile {{ storage_profile }} --nic {{ storage_nic }} --mgmt-ip {{ ansible_host }}"
+ansible all -m shell -a "storctl check --json"
 ```
 
 ## TCP 降级策略
@@ -83,3 +88,13 @@ storctl apply ... --allow-tcp-fallback
 ```
 
 这会持久化 TCP NFS，并在 `/var/lib/storctl/state.json` 写入 `degraded: true`。后续 `storctl check` 会继续提示降级状态。
+
+## QoS 策略
+
+v0.4 起默认不配置 QoS。确认交换机 PFC/ECN/DSCP 和存储侧策略后，再显式使用：
+
+```bash
+storctl apply ... --qos apply
+```
+
+或在 profile 中设置 `qos.enabled=true`。批量汇总时使用 `storctl check --json`，不要 grep 人类输出文本。

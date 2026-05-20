@@ -10,6 +10,9 @@
       "third_octet_map": {
         "17": 4
       },
+      "qos": {
+        "enabled": false
+      },
       "mounts": [
         {
           "server": "172.27.1.1",

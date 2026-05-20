@@ -24,8 +24,8 @@ It is responsible for:
 
 - Resolving the final host configuration from a profile.
 - Checking local OS, NIC type, driver, RDMA, QoS, and mount state.
-- Idempotently configuring NetworkManager VLANs, routing rules, QoS, and NFS
-  mount persistence.
+- Idempotently configuring NetworkManager VLANs, routing rules, explicitly
+  enabled QoS, and NFS mount persistence.
 - Selecting a local driver artifact that matches the host OS, architecture, and
   NIC type.
 - Printing step-level `OK / SKIP / WARN / FAIL` output.
@@ -40,6 +40,22 @@ It is not responsible for:
 
 Batch orchestration belongs in Ansible or similar systems. `storctl` is the
 single-host command they call.
+
+For scripts, use JSON output. Human `OK / SKIP / WARN / FAIL` text is for
+troubleshooting; JSON is the stable machine interface.
+
+## Command Safety
+
+| Command | Mutates host | Needs root |
+| --- | --- | --- |
+| `plan` | no | no |
+| `check` | no | no |
+| `version` | no | no |
+| `generate-manifest` | no | no |
+| `validate-profile` | no | no |
+| `validate-artifacts` | no | no |
+| `install-driver` | yes | yes |
+| `apply` | yes | yes |
 
 ## NIC Selection
 
@@ -96,6 +112,8 @@ Check the current host:
 
 ```bash
 storctl check
+storctl check --json
+storctl version --json
 ```
 
 Install a local driver artifact:
@@ -117,7 +135,7 @@ flowchart TD
   F --> G{"Driver ready?"}
   G -- "No" --> H["FAIL driver: run install-driver"]
   G -- "Yes" --> I["Configure NetworkManager VLAN"]
-  I --> J["Apply QoS"]
+  I --> J["Optionally apply QoS"]
   J --> K["Check RDMA client"]
   K --> L["Persist mounts"]
   L --> M["Mount NFS-RDMA"]
@@ -171,6 +189,43 @@ result = 172.27.4.113/18
 CLI arguments always win over profile values. For example, `--data-ip` skips
 data IP derivation, and repeated `--mount` flags replace profile mounts.
 
+QoS is disabled by default. Enable it only after switch and storage policy are
+confirmed:
+
+```bash
+storctl apply ... --qos apply
+```
+
+Profiles can enable QoS and override the built-in parameters:
+
+```json
+{
+  "profiles": {
+    "c4": {
+      "qos": {
+        "enabled": true,
+        "cx7": {
+          "pfc": "0,0,0,0,1,0,0,0",
+          "tos": 128,
+          "prio_tc": "1,0,0,0,4,0,0,0",
+          "tsa": "ets,ets,ets,ets,ets,ets,ets,ets",
+          "tcbw": "10,0,0,0,90,0,0,0"
+        },
+        "nic_1823": {
+          "ecn_algo": "dcqcn",
+          "pfc": "0,0,0,0,1,0,0,0",
+          "trust": "dscp",
+          "ets_classes": "0,1,2,3,4,5,6,7",
+          "ets_weights": "10,0,0,0,90,0,0,0"
+        }
+      }
+    }
+  }
+}
+```
+
+CLI wins: `--qos off` overrides profile `qos.enabled=true`.
+
 ## Batch Usage
 
 Recommended Ansible shape. Inventory carries per-host differences; profiles
@@ -183,6 +238,23 @@ ansible all -m copy -a "src=storctl-profiles.json dest=/etc/storctl/profiles.jso
 ansible all -m shell -a "storctl install-driver --nic-type {{ nic_type }} --artifact-dir /root/storage_pkgs"
 ansible all -m shell -a "storctl plan --profile {{ storage_profile }} --nic {{ storage_nic }} --mgmt-ip {{ ansible_host }}"
 ansible all -m shell -a "storctl apply --profile {{ storage_profile }} --nic {{ storage_nic }} --mgmt-ip {{ ansible_host }}"
+```
+
+Collect status with stable JSON:
+
+```bash
+ansible all -m shell -a "storctl check --json"
+```
+
+Each check has stable fields:
+
+```json
+{
+  "checks": [
+    {"name": "rdma", "status": "warn", "code": "rdma_link_empty", "message": "rdma link empty"}
+  ],
+  "summary": {"ok": 0, "warn": 1, "fail": 0}
+}
 ```
 
 Minimum inventory variables:
@@ -250,10 +322,22 @@ Example `storctl-artifacts.json`:
 
 This repository also includes [storctl-artifacts.example.json](storctl-artifacts.example.json) as a template.
 
-Generate checksums:
+Generate a manifest from a local directory. This prints JSON to stdout and does
+not modify files:
 
 ```bash
-sha256sum /root/storage_pkgs/*.tgz /root/storage_pkgs/*.tar.gz
+storctl generate-manifest \
+  --artifact-dir /root/storage_pkgs \
+  --os-id openEuler \
+  --os-version-prefix 22.03 \
+  --arch aarch64 > /root/storage_pkgs/storctl-artifacts.json
+```
+
+Validate inputs:
+
+```bash
+storctl validate-profile --profile-file /etc/storctl/profiles.json
+storctl validate-artifacts --artifact-dir /root/storage_pkgs
 ```
 
 - CX7 prefers true offline `MLNX_OFED_LINUX-*.tgz` or `IB_NIC-*.tgz` bundles.
@@ -323,14 +407,23 @@ systemd automount fails:
   journalctl -u mnt-share.automount -xe
   ```
 
+QoS was not configured:
+
+- Since v0.4, QoS is disabled by default. `SKIP qos disabled` is expected.
+- Use `--qos apply` or profile `qos.enabled=true` only after validating switch
+  and storage policy.
+
 1823 ECN sysfs is missing:
 
 - Some 1823 driver versions do not expose `/sys/class/net/<nic>/ecn/cc_algo`.
-- `storctl` treats that as optional and still applies `hinicadm3 qos`.
+- When QoS is explicitly enabled, `storctl` treats that as optional and still
+  applies `hinicadm3 qos`.
 
 ## Notes
 
 - `storctl` does not implement DTFS, `cid`, `dn`, or zone generation.
-- State is written to `/var/lib/storctl/state.json`.
+- State is written to `/var/lib/storctl/state.json`; current `schema_version`
+  is `1`.
 - With systemd, mounts use `.mount/.automount` units. Without systemd, mounts
   are persisted in `/etc/fstab`.
+- The project uses Apache-2.0. Upgrade notes live in [CHANGELOG.md](CHANGELOG.md).

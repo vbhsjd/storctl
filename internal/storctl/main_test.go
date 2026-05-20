@@ -2,6 +2,7 @@ package storctl
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -25,5 +26,20 @@ func TestApplyArgValidation(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "FAIL args") {
 		t.Fatalf("stderr = %s", stderr.String())
+	}
+}
+
+func TestVersionJSON(t *testing.T) {
+	var out, stderr bytes.Buffer
+	code := Main([]string{"version", "--json"}, &out, &stderr)
+	if code != 0 {
+		t.Fatalf("code = %d stderr=%s", code, stderr.String())
+	}
+	var info VersionInfo
+	if err := json.Unmarshal(out.Bytes(), &info); err != nil {
+		t.Fatal(err)
+	}
+	if info.Version == "" || info.Commit == "" || info.BuiltAt == "" || info.Go == "" {
+		t.Fatalf("incomplete version info: %+v", info)
 	}
 }

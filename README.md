@@ -16,7 +16,7 @@
 
 - 读取 profile，把每台机器的最终配置算清楚。
 - 检查本机 OS、网卡类型、驱动、RDMA、QoS、挂载状态。
-- 幂等配置 NetworkManager VLAN、routing rule、QoS、NFS 挂载持久化。
+- 幂等配置 NetworkManager VLAN、routing rule、显式启用的 QoS、NFS 挂载持久化。
 - 在离线 artifact 目录里选择匹配本机 OS/架构/网卡类型的驱动包。
 - 用 `OK / SKIP / WARN / FAIL` 输出人能看懂的步骤结果。
 
@@ -29,6 +29,21 @@
 - 在多个 200G 端口里猜哪个才是正确业务口。
 
 批量编排交给 Ansible 或类似系统。`storctl` 的定位是被它们调用的单机命令。
+
+面向脚本时请使用 JSON 输出，不要 grep 人类可读文本。`OK / SKIP / WARN / FAIL` 文本服务于排障阅读，JSON schema 才是稳定机器接口。
+
+## 命令安全表
+
+| Command | Mutates host | Needs root |
+| --- | --- | --- |
+| `plan` | no | no |
+| `check` | no | no |
+| `version` | no | no |
+| `generate-manifest` | no | no |
+| `validate-profile` | no | no |
+| `validate-artifacts` | no | no |
+| `install-driver` | yes | yes |
+| `apply` | yes | yes |
 
 ## 网卡选择
 
@@ -82,6 +97,8 @@ storctl apply --profile c4 --nic enp23s0f1 --mgmt-ip 80.5.17.113
 
 ```bash
 storctl check
+storctl check --json
+storctl version --json
 ```
 
 离线安装驱动：
@@ -103,7 +120,7 @@ flowchart TD
   F --> G{"驱动就绪?"}
   G -- "否" --> H["FAIL driver: 运行 install-driver"]
   G -- "是" --> I["配置 NetworkManager VLAN"]
-  I --> J["应用 QoS"]
+  I --> J["按需应用 QoS"]
   J --> K["检查 RDMA 客户端"]
   K --> L["持久化挂载"]
   L --> M["挂载 NFS-RDMA"]
@@ -155,6 +172,42 @@ result = 172.27.4.113/18
 
 CLI 参数优先级最高。比如显式传 `--data-ip` 会跳过 IP 推导，重复传 `--mount` 会覆盖 profile 里的挂载配置。
 
+QoS 默认不配置。如果你的交换机和存储侧已经确认需要由主机侧下发 QoS，可以在 profile 中显式启用：
+
+```json
+{
+  "profiles": {
+    "c4": {
+      "qos": {
+        "enabled": true,
+        "cx7": {
+          "pfc": "0,0,0,0,1,0,0,0",
+          "tos": 128,
+          "prio_tc": "1,0,0,0,4,0,0,0",
+          "tsa": "ets,ets,ets,ets,ets,ets,ets,ets",
+          "tcbw": "10,0,0,0,90,0,0,0"
+        },
+        "nic_1823": {
+          "ecn_algo": "dcqcn",
+          "pfc": "0,0,0,0,1,0,0,0",
+          "trust": "dscp",
+          "ets_classes": "0,1,2,3,4,5,6,7",
+          "ets_weights": "10,0,0,0,90,0,0,0"
+        }
+      }
+    }
+  }
+}
+```
+
+也可以临时通过 CLI 启用：
+
+```bash
+storctl apply ... --qos apply
+```
+
+CLI 优先级最高，`--qos off` 会覆盖 profile 里的 `qos.enabled=true`。
+
 ## 批量使用
 
 推荐 Ansible 形态。核心原则是 inventory 提供每台机器的差异，profile 提供每个集群的固定项：
@@ -166,6 +219,23 @@ ansible all -m copy -a "src=storctl-profiles.json dest=/etc/storctl/profiles.jso
 ansible all -m shell -a "storctl install-driver --nic-type {{ nic_type }} --artifact-dir /root/storage_pkgs"
 ansible all -m shell -a "storctl plan --profile {{ storage_profile }} --nic {{ storage_nic }} --mgmt-ip {{ ansible_host }}"
 ansible all -m shell -a "storctl apply --profile {{ storage_profile }} --nic {{ storage_nic }} --mgmt-ip {{ ansible_host }}"
+```
+
+批量汇总状态时使用 JSON：
+
+```bash
+ansible all -m shell -a "storctl check --json"
+```
+
+`check --json` 每条检查都有稳定字段：
+
+```json
+{
+  "checks": [
+    {"name": "rdma", "status": "warn", "code": "rdma_link_empty", "message": "rdma link empty"}
+  ],
+  "summary": {"ok": 0, "warn": 1, "fail": 0}
+}
 ```
 
 最小 inventory 变量：
@@ -229,10 +299,21 @@ GOOS=linux GOARCH=arm64 go build -o storctl-linux-arm64 ./cmd/storctl
 
 仓库里也提供了 [storctl-artifacts.example.json](storctl-artifacts.example.json) 作为模板。
 
-生成校验值：
+可以由工具扫描本地目录生成 manifest。它只输出到 stdout，不会修改文件：
 
 ```bash
-sha256sum /root/storage_pkgs/*.tgz /root/storage_pkgs/*.tar.gz
+storctl generate-manifest \
+  --artifact-dir /root/storage_pkgs \
+  --os-id openEuler \
+  --os-version-prefix 22.03 \
+  --arch aarch64 > /root/storage_pkgs/storctl-artifacts.json
+```
+
+校验 profile 和 artifact：
+
+```bash
+storctl validate-profile --profile-file /etc/storctl/profiles.json
+storctl validate-artifacts --artifact-dir /root/storage_pkgs
 ```
 
 - CX7 优先使用真离线的 `MLNX_OFED_LINUX-*.tgz` 或 `IB_NIC-*.tgz`。
@@ -295,13 +376,19 @@ systemd automount 失败：
   journalctl -u mnt-share.automount -xe
   ```
 
+QoS 没有被配置：
+
+- v0.4 起 QoS 默认不配置，正常输出是 `SKIP qos disabled`。
+- 确认交换机和存储侧策略后，再显式使用 `--qos apply` 或 profile `qos.enabled=true`。
+
 1823 缺少 ECN sysfs：
 
 - 部分 1823 驱动版本没有 `/sys/class/net/<nic>/ecn/cc_algo`。
-- `storctl` 会把它当作可选项跳过，并继续执行 `hinicadm3 qos`。
+- 显式启用 QoS 时，`storctl` 会把它当作可选项跳过，并继续执行 `hinicadm3 qos`。
 
 ## 说明
 
 - `storctl` 不实现 DTFS、`cid`、`dn` 或 zone 生成。
-- 状态文件写入 `/var/lib/storctl/state.json`。
+- 状态文件写入 `/var/lib/storctl/state.json`，当前 `schema_version` 为 `1`。
 - 有 systemd 时使用 `.mount/.automount` 持久化挂载；没有 systemd 时写入 `/etc/fstab`。
+- 项目使用 Apache-2.0 license，升级说明见 [CHANGELOG.md](CHANGELOG.md)。

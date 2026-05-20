@@ -19,13 +19,39 @@ jobs:
           go-version: "1.22"
 
       - name: Test
-        run: go test ./...
+        run: |
+          go test ./...
+          go vet ./...
+
+      - name: Build native smoke binary
+        run: |
+          go build -ldflags "-X storctl/internal/storctl.Version=${GITHUB_REF_NAME} -X storctl/internal/storctl.Commit=${GITHUB_SHA} -X storctl/internal/storctl.BuiltAt=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o storctl-smoke ./cmd/storctl
+          ./storctl-smoke version --json | grep "${GITHUB_REF_NAME}"
+          ./storctl-smoke check --json >/tmp/storctl-check.json
 
       - name: Build linux arm64
         run: |
-          GOOS=linux GOARCH=arm64 go build -o storctl-linux-arm64 ./cmd/storctl
+          GOOS=linux GOARCH=arm64 go build -ldflags "-X storctl/internal/storctl.Version=${GITHUB_REF_NAME} -X storctl/internal/storctl.Commit=${GITHUB_SHA} -X storctl/internal/storctl.BuiltAt=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o storctl-linux-arm64 ./cmd/storctl
           sha256sum storctl-linux-arm64 > storctl-linux-arm64.sha256
-          zip -9 storctl-linux-arm64.zip storctl-linux-arm64 README.md storctl-linux-arm64.sha256
+          zip -9 storctl-linux-arm64.zip \
+            storctl-linux-arm64 \
+            storctl-linux-arm64.sha256 \
+            README.md \
+            README.en.md \
+            CHANGELOG.md \
+            LICENSE \
+            storctl-profiles.example.json \
+            storctl-artifacts.example.json \
+            docs/offline-driver-matrix.md
+          unzip -l storctl-linux-arm64.zip | grep README.en.md
+          unzip -l storctl-linux-arm64.zip | grep docs/offline-driver-matrix.md
+
+      - name: Release notes
+        run: |
+          awk "/^## ${GITHUB_REF_NAME}/{flag=1;next}/^## v/{flag=0}flag" CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "storctl ${GITHUB_REF_NAME}" > release-notes.md
+          fi
 
       - name: Create release
         env:
@@ -35,4 +61,4 @@ jobs:
             storctl-linux-arm64.zip \
             storctl-linux-arm64.sha256 \
             --title "storctl ${GITHUB_REF_NAME}" \
-            --notes "storctl CLI with profile-driven NetworkManager VLAN, CX7/1823 QoS, offline driver artifacts, and explicit NFS-RDMA/TCP fallback handling."
+            --notes-file release-notes.md

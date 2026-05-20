@@ -2,10 +2,15 @@ package storctl
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
 func configureQoS(cfg Config, nicType string, r *Reporter, runner Runner) error {
+	if cfg.QoSMode != "apply" {
+		r.Skip("qos disabled")
+		return nil
+	}
 	var commands []string
 	switch nicType {
 	case "cx7":
@@ -13,9 +18,9 @@ func configureQoS(cfg Config, nicType string, r *Reporter, runner Runner) error 
 		if err != nil {
 			return err
 		}
-		commands = cx7QoSCommands(cfg.NIC, ibdev)
+		commands = cx7QoSCommands(cfg.NIC, ibdev, cfg.QoS.CX7)
 	case "1823":
-		commands = hinicQoSCommands(cfg.NIC)
+		commands = hinicQoSCommands(cfg.NIC, cfg.QoS.NIC1823)
 	default:
 		return fmt.Errorf("unsupported nic type %s", nicType)
 	}
@@ -50,25 +55,65 @@ func ibdevForNIC(nic string, runner Runner) (string, error) {
 	return "", fmt.Errorf("no ibdev maps to %s", nic)
 }
 
-func cx7QoSCommands(nic, ibdev string) []string {
+func defaultCX7QoS(q CX7QoS) CX7QoS {
+	if q.PFC == "" {
+		q.PFC = "0,0,0,0,1,0,0,0"
+	}
+	if q.ToS == 0 {
+		q.ToS = 128
+	}
+	if q.PrioTC == "" {
+		q.PrioTC = "1,0,0,0,4,0,0,0"
+	}
+	if q.TSA == "" {
+		q.TSA = "ets,ets,ets,ets,ets,ets,ets,ets"
+	}
+	if q.TCBW == "" {
+		q.TCBW = "10,0,0,0,90,0,0,0"
+	}
+	return q
+}
+
+func default1823QoS(q NIC1823QoS) NIC1823QoS {
+	if q.ECNAlgo == "" {
+		q.ECNAlgo = "dcqcn"
+	}
+	if q.PFC == "" {
+		q.PFC = "0,0,0,0,1,0,0,0"
+	}
+	if q.Trust == "" {
+		q.Trust = "dscp"
+	}
+	if q.ETSClasses == "" {
+		q.ETSClasses = "0,1,2,3,4,5,6,7"
+	}
+	if q.ETSWeights == "" {
+		q.ETSWeights = "10,0,0,0,90,0,0,0"
+	}
+	return q
+}
+
+func cx7QoSCommands(nic, ibdev string, qos CX7QoS) []string {
+	q := defaultCX7QoS(qos)
 	return []string{
-		fmt.Sprintf("mlnx_qos -i %s --pfc 0,0,0,0,1,0,0,0 --trust dscp", shellQuote(nic)),
-		fmt.Sprintf("cma_roce_tos -d %s -t 128", shellQuote(ibdev)),
-		fmt.Sprintf("mlnx_qos -i %s --prio_tc 1,0,0,0,4,0,0,0", shellQuote(nic)),
-		fmt.Sprintf("mlnx_qos -i %s --tsa ets,ets,ets,ets,ets,ets,ets,ets --tcbw 10,0,0,0,90,0,0,0", shellQuote(nic)),
+		fmt.Sprintf("mlnx_qos -i %s --pfc %s --trust dscp", shellQuote(nic), shellQuote(q.PFC)),
+		fmt.Sprintf("cma_roce_tos -d %s -t %s", shellQuote(ibdev), strconv.Itoa(q.ToS)),
+		fmt.Sprintf("mlnx_qos -i %s --prio_tc %s", shellQuote(nic), shellQuote(q.PrioTC)),
+		fmt.Sprintf("mlnx_qos -i %s --tsa %s --tcbw %s", shellQuote(nic), shellQuote(q.TSA), shellQuote(q.TCBW)),
 	}
 }
 
-func hinicQoSCommands(nic string) []string {
+func hinicQoSCommands(nic string, qos NIC1823QoS) []string {
+	config := default1823QoS(qos)
 	q := shellQuote(nic)
 	ecnPath := shellQuote("/sys/class/net/" + nic + "/ecn/cc_algo")
 	return []string{
-		fmt.Sprintf("if [ -e %s ]; then echo dcqcn > %s; fi", ecnPath, ecnPath),
+		fmt.Sprintf("if [ -e %s ]; then echo %s > %s; fi", ecnPath, shellQuote(config.ECNAlgo), ecnPath),
 		fmt.Sprintf("hinicadm3 qos -i %s -t dcb -e 1", q),
-		fmt.Sprintf("hinicadm3 qos -i %s -t pfc -e 1 -f 0,0,0,0,1,0,0,0", q),
-		fmt.Sprintf("hinicadm3 qos -i %s --dev_trust dscp", q),
-		fmt.Sprintf("hinicadm3 qos -i %s --port_trust dscp", q),
-		fmt.Sprintf("hinicadm3 qos -i %s -t ets -c 0,1,2,3,4,5,6,7 -w 10,0,0,0,90,0,0,0", q),
+		fmt.Sprintf("hinicadm3 qos -i %s -t pfc -e 1 -f %s", q, shellQuote(config.PFC)),
+		fmt.Sprintf("hinicadm3 qos -i %s --dev_trust %s", q, shellQuote(config.Trust)),
+		fmt.Sprintf("hinicadm3 qos -i %s --port_trust %s", q, shellQuote(config.Trust)),
+		fmt.Sprintf("hinicadm3 qos -i %s -t ets -c %s -w %s", q, shellQuote(config.ETSClasses), shellQuote(config.ETSWeights)),
 		"sed -i '/net.ipv4.conf.all.arp_ignore/d' /etc/sysctl.conf",
 		"echo 'net.ipv4.conf.all.arp_ignore=1' >> /etc/sysctl.conf",
 		"sysctl -w net.ipv4.conf.all.arp_ignore=1",

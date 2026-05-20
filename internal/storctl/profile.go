@@ -26,6 +26,7 @@ type Profile struct {
 	MTU           int            `json:"mtu"`
 	ArtifactDir   string         `json:"artifact_dir"`
 	ThirdOctetMap map[string]int `json:"third_octet_map"`
+	QoS           QoSConfig      `json:"qos"`
 	Mounts        []ProfileMount `json:"mounts"`
 }
 
@@ -77,6 +78,12 @@ func applyProfileDefaults(cfg Config, profile Profile, seen map[string]bool) Con
 	}
 	if !seen["artifact-dir"] && profile.ArtifactDir != "" {
 		cfg.ArtifactDir = profile.ArtifactDir
+	}
+	if profile.QoS.Enabled {
+		cfg.QoS = profile.QoS
+		if !seen["qos"] {
+			cfg.QoSMode = "apply"
+		}
 	}
 	if !seen["mount"] && len(profile.Mounts) > 0 {
 		cfg.Mounts = profileMounts(profile.Mounts)
@@ -140,6 +147,47 @@ func readProfiles(path string) (ProfilesFile, error) {
 		return ProfilesFile{}, fmt.Errorf("profile file has no profiles")
 	}
 	return profiles, nil
+}
+
+func ValidateProfiles(path string) error {
+	profiles, err := readProfiles(path)
+	if err != nil {
+		return err
+	}
+	for name, profile := range profiles.Profiles {
+		if profile.VLANID < 1 || profile.VLANID > 4094 {
+			return fmt.Errorf("profile %s vlan_id must be 1..4094", name)
+		}
+		if net.ParseIP(profile.Gateway) == nil {
+			return fmt.Errorf("profile %s gateway must be a valid IP", name)
+		}
+		if profile.Prefix < 0 || profile.Prefix > 32 {
+			return fmt.Errorf("profile %s prefix must be 0..32", name)
+		}
+		if profile.RouteTable < 0 {
+			return fmt.Errorf("profile %s route_table must not be negative", name)
+		}
+		if profile.MTU != 0 && profile.MTU < 1500 {
+			return fmt.Errorf("profile %s mtu must be at least 1500", name)
+		}
+		for key, value := range profile.ThirdOctetMap {
+			if _, err := strconv.Atoi(key); err != nil {
+				return fmt.Errorf("profile %s third_octet_map key %q must be an integer", name, key)
+			}
+			if value < 0 || value > 255 {
+				return fmt.Errorf("profile %s third_octet_map value for %s must be 0..255", name, key)
+			}
+		}
+		if len(profile.Mounts) == 0 {
+			return fmt.Errorf("profile %s must define at least one mount", name)
+		}
+		for _, mount := range profile.Mounts {
+			if mount.Server == "" || !strings.HasPrefix(mount.Export, "/") || !strings.HasPrefix(mount.MountPoint, "/") {
+				return fmt.Errorf("profile %s has invalid mount", name)
+			}
+		}
+	}
+	return nil
 }
 
 func resolveManagementIP(explicit string) (net.IP, error) {

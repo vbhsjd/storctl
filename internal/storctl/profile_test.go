@@ -56,6 +56,41 @@ func TestCLIOverridesProfile(t *testing.T) {
 	}
 }
 
+func TestProfileQoSEnablesApplyMode(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "storctl-profiles.json")
+	data := `{
+  "profiles": {
+    "c4": {
+      "vlan_id": 172,
+      "gateway": "172.27.0.1",
+      "prefix": 18,
+      "third_octet_map": {"17": 4},
+      "qos": {"enabled": true, "cx7": {"tos": 160}},
+      "mounts": [
+        {"server": "172.27.1.1", "export": "/Share", "mount_point": "/mnt/share"}
+      ]
+    }
+  }
+}`
+	if err := os.WriteFile(path, []byte(data), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := parsePlan([]string{"--profile-file", path, "--profile", "c4", "--nic", "enp23s0f1", "--mgmt-ip", "80.5.17.113"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.QoSMode != "apply" || cfg.QoS.CX7.ToS != 160 {
+		t.Fatalf("qos profile not applied: %+v", cfg)
+	}
+	cfg, err = parsePlan([]string{"--profile-file", path, "--profile", "c4", "--nic", "enp23s0f1", "--mgmt-ip", "80.5.17.113", "--qos", "off"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.QoSMode != "off" || cfg.QoS.CX7.ToS != 160 {
+		t.Fatalf("qos CLI override/profile params failed: %+v", cfg)
+	}
+}
+
 func TestMissingThirdOctetMappingFails(t *testing.T) {
 	path := writeTestProfile(t)
 	_, err := parsePlan([]string{

@@ -1,8 +1,10 @@
 package storctl
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -56,5 +58,52 @@ func TestVerifySHA256(t *testing.T) {
 	}
 	if err := verifySHA256(path, strings.Repeat("0", 64)); err == nil {
 		t.Fatal("expected checksum error")
+	}
+}
+
+func TestGenerateManifest(t *testing.T) {
+	dir := t.TempDir()
+	files := map[string]string{
+		"MLNX_OFED_LINUX-test.tgz": "cx7",
+		"nic_1823-test.tar.gz":     "1823",
+		"doca-host-test.rpm":       "doca",
+		"ignore.txt":               "ignore",
+	}
+	for name, data := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(data), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var out, stderr bytes.Buffer
+	err := GenerateManifest(ManifestGenerateConfig{
+		ArtifactDir:     dir,
+		OSID:            "openEuler",
+		OSVersionPrefix: "22.03",
+		Arch:            "aarch64",
+	}, &out, &stderr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stderr.String(), "WARN artifact ignored ignore.txt") {
+		t.Fatalf("missing ignored warning: %s", stderr.String())
+	}
+	var manifest ArtifactManifest
+	if err := json.Unmarshal(out.Bytes(), &manifest); err != nil {
+		t.Fatal(err)
+	}
+	if len(manifest.Artifacts) != 3 {
+		t.Fatalf("Artifacts len = %d", len(manifest.Artifacts))
+	}
+	foundRepo := false
+	for _, artifact := range manifest.Artifacts {
+		if artifact.File == "doca-host-test.rpm" && artifact.RequiresRepo && artifact.NICType == "cx7" {
+			foundRepo = true
+		}
+		if artifact.SHA256 == "" {
+			t.Fatalf("missing sha256 for %+v", artifact)
+		}
+	}
+	if !foundRepo {
+		t.Fatalf("doca-host artifact not marked requires_repo: %+v", manifest.Artifacts)
 	}
 }

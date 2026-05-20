@@ -1,112 +1,195 @@
 package storctl
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
 )
 
+type CheckReport struct {
+	SchemaVersion int          `json:"schema_version"`
+	State         *State       `json:"state,omitempty"`
+	Checks        []CheckItem  `json:"checks"`
+	Summary       CheckSummary `json:"summary"`
+}
+
+type CheckItem struct {
+	Name    string `json:"name"`
+	Status  string `json:"status"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+type CheckSummary struct {
+	OK   int `json:"ok"`
+	Warn int `json:"warn"`
+	Fail int `json:"fail"`
+}
+
 func Check(cfg Config, r *Reporter, runner Runner) error {
+	report := collectCheckReport(cfg, runner)
+	if cfg.CheckJSON {
+		enc := json.NewEncoder(r.out)
+		enc.SetIndent("", "  ")
+		return enc.Encode(report)
+	}
+	emitCheckReport(report, r)
+	return nil
+}
+
+func collectCheckReport(cfg Config, runner Runner) CheckReport {
+	report := CheckReport{SchemaVersion: 1}
 	state, err := loadState(cfg.StateDir)
 	if err != nil {
-		r.Warn("state not found: %s/state.json", cfg.StateDir)
+		report.add("state", "warn", "state_not_found", fmt.Sprintf("state not found: %s/state.json", cfg.StateDir))
 	} else {
-		r.OK("state %s %s", state.NIC, state.VLAN)
+		report.State = &state
+		report.add("state", "ok", "state_loaded", fmt.Sprintf("%s %s", state.NIC, state.VLAN))
 		if state.Degraded {
-			r.Warn("degraded tcp-fallback: %s", state.DegradedReason)
+			report.add("degraded", "warn", "tcp_fallback_degraded", state.DegradedReason)
 		}
 	}
 
 	osID, osVersion, err := detectOS()
 	if err != nil {
-		r.Warn("os unknown: %v", err)
+		report.add("os", "warn", "os_unknown", err.Error())
 	} else if isOpenEuler(osID) && supportedOpenEuler(osVersion) {
-		r.OK("os openEuler %s", osVersion)
+		report.add("os", "ok", "os_supported", fmt.Sprintf("openEuler %s", osVersion))
 	} else {
-		r.Warn("os %s %s not tested", osID, osVersion)
+		report.add("os", "warn", "os_not_tested", fmt.Sprintf("%s %s not tested", osID, osVersion))
 	}
 
 	if runner.Exists("nmcli") {
-		r.OK("networkmanager nmcli found")
+		report.add("networkmanager", "ok", "nmcli_found", "nmcli found")
 	} else {
-		r.Warn("networkmanager nmcli missing")
+		report.add("networkmanager", "warn", "nmcli_missing", "nmcli missing")
 	}
 	if runner.Exists("rdma") {
 		if out, err := runner.Run("rdma", "link"); err == nil && strings.TrimSpace(out) != "" {
-			r.OK("rdma link ready")
+			report.add("rdma", "ok", "rdma_link_ready", "rdma link ready")
 		} else {
-			r.Warn("rdma link empty")
+			report.add("rdma", "warn", "rdma_link_empty", "rdma link empty")
 		}
 	} else {
-		r.Warn("rdma command missing")
+		report.add("rdma", "warn", "rdma_command_missing", "rdma command missing")
 	}
 	if runner.Exists("ibdev2netdev") {
 		if out, err := runner.Run("ibdev2netdev"); err == nil && strings.TrimSpace(out) != "" {
-			r.OK("ibdev2netdev ready")
+			report.add("ibdev2netdev", "ok", "ibdev2netdev_ready", "ibdev2netdev ready")
 		} else {
-			r.Warn("ibdev2netdev empty")
+			report.add("ibdev2netdev", "warn", "ibdev2netdev_empty", "ibdev2netdev empty")
 		}
 	} else {
-		r.Warn("ibdev2netdev missing")
+		report.add("ibdev2netdev", "warn", "ibdev2netdev_missing", "ibdev2netdev missing")
 	}
 	if runner.Exists("nfsstat") {
 		if out, err := runner.Run("nfsstat", "-m"); err == nil {
 			if strings.Contains(out, "proto=rdma") {
-				r.OK("nfs proto=rdma")
+				report.add("nfs", "ok", "nfs_rdma_found", "proto=rdma")
 			} else {
-				r.Warn("nfs rdma mount not found")
+				report.add("nfs", "warn", "nfs_rdma_not_found", "rdma mount not found")
 			}
 		}
 	} else {
-		r.Warn("nfsstat missing")
+		report.add("nfs", "warn", "nfsstat_missing", "nfsstat missing")
 	}
 
 	if state.NIC != "" {
-		checkLink(state.NIC, r, runner)
-		checkLink(state.VLAN, r, runner)
-		checkMountState(state, r, runner)
+		checkDriverState(state, &report, runner)
+		checkLink(state.NIC, &report, runner)
+		checkLink(state.VLAN, &report, runner)
+		checkMountState(state, &report, runner)
 		if state.RebootRequired {
-			r.Warn("reboot recommended: previous driver update")
+			report.add("reboot", "warn", "reboot_recommended", "previous driver update")
 		}
 	}
-	return nil
+	return report
 }
 
-func checkLink(name string, r *Reporter, runner Runner) {
+func (r *CheckReport) add(name, status, code, message string) {
+	r.Checks = append(r.Checks, CheckItem{Name: name, Status: status, Code: code, Message: message})
+	switch status {
+	case "ok":
+		r.Summary.OK++
+	case "fail":
+		r.Summary.Fail++
+	default:
+		r.Summary.Warn++
+	}
+}
+
+func emitCheckReport(report CheckReport, r *Reporter) {
+	for _, item := range report.Checks {
+		switch item.Status {
+		case "ok":
+			r.OK("%s %s", item.Name, item.Message)
+		case "fail":
+			r.Fail(item.Name, item.Message, "")
+		default:
+			r.Warn("%s %s", item.Name, item.Message)
+		}
+	}
+}
+
+func checkDriverState(state State, report *CheckReport, runner Runner) {
+	switch state.NICType {
+	case "cx7":
+		missing := []string{}
+		for _, cmd := range []string{"ibdev2netdev", "mlnx_qos", "cma_roce_tos"} {
+			if !runner.Exists(cmd) {
+				missing = append(missing, cmd)
+			}
+		}
+		if len(missing) > 0 {
+			report.add("driver", "warn", "driver_not_ready", "missing "+strings.Join(missing, ","))
+			return
+		}
+		report.add("driver", "ok", "driver_ready", "cx7 tools ready")
+	case "1823":
+		if !runner.Exists("hinicadm3") {
+			report.add("driver", "warn", "driver_not_ready", "hinicadm3 missing")
+			return
+		}
+		report.add("driver", "ok", "driver_ready", "hinicadm3 ready")
+	}
+}
+
+func checkLink(name string, report *CheckReport, runner Runner) {
 	if name == "" {
 		return
 	}
 	if _, err := os.Stat("/sys/class/net/" + name); err != nil {
-		r.Warn("link %s missing", name)
+		report.add("link:"+name, "warn", "link_missing", "missing")
 		return
 	}
 	out, err := runner.Run("ip", "-s", "link", "show", name)
 	if err != nil {
-		r.Warn("link %s unreadable", name)
+		report.add("link:"+name, "warn", "link_unreadable", "unreadable")
 		return
 	}
 	if strings.Contains(out, "DOWN") {
-		r.Warn("link %s down", name)
+		report.add("link:"+name, "warn", "link_down", "down")
 		return
 	}
-	r.OK("link %s up", name)
+	report.add("link:"+name, "ok", "link_up", "up")
 }
 
-func checkMountState(state State, r *Reporter, runner Runner) {
+func checkMountState(state State, report *CheckReport, runner Runner) {
 	if !runner.Exists("findmnt") {
-		r.Warn("findmnt missing")
+		report.add("findmnt", "warn", "findmnt_missing", "findmnt missing")
 		return
 	}
 	for _, m := range state.Mounts {
 		out, err := runner.Run("findmnt", "-n", "--mountpoint", m.MountPoint, "-o", "FSTYPE,OPTIONS")
 		if err != nil {
-			r.Warn("mount %s missing", m.MountPoint)
+			report.add("mount:"+m.MountPoint, "warn", "mount_missing", "missing")
 			continue
 		}
 		if strings.Contains(out, "nfs") && strings.Contains(out, "proto=rdma") {
-			r.OK("mount %s proto=rdma", m.MountPoint)
+			report.add("mount:"+m.MountPoint, "ok", "mount_rdma", "proto=rdma")
 		} else {
-			r.Warn("mount %s not rdma: %s", m.MountPoint, strings.TrimSpace(out))
+			report.add("mount:"+m.MountPoint, "warn", "mount_not_rdma", strings.TrimSpace(out))
 		}
 	}
 }

@@ -12,6 +12,51 @@ func Main(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	switch args[0] {
+	case "version":
+		jsonOut, err := parseVersion(args[1:])
+		if err != nil {
+			r.Fail("args", err.Error(), "run: storctl help")
+			return 2
+		}
+		if err := PrintVersion(jsonOut, stdout); err != nil {
+			return 1
+		}
+		return 0
+	case "generate-manifest":
+		cfg, err := parseGenerateManifest(args[1:])
+		if err != nil {
+			r.Fail("args", err.Error(), "run: storctl help")
+			return 2
+		}
+		if err := GenerateManifest(cfg, stdout, stderr); err != nil {
+			r.Fail("manifest", err.Error(), "check --artifact-dir and supported package names")
+			return 1
+		}
+		return 0
+	case "validate-profile":
+		path, err := parseValidateProfile(args[1:])
+		if err != nil {
+			r.Fail("args", err.Error(), "run: storctl help")
+			return 2
+		}
+		if err := ValidateProfiles(path); err != nil {
+			r.Fail("profile", err.Error(), "fix profile JSON")
+			return 1
+		}
+		r.OK("profile %s valid", path)
+		return 0
+	case "validate-artifacts":
+		dir, err := parseValidateArtifacts(args[1:])
+		if err != nil {
+			r.Fail("args", err.Error(), "run: storctl help")
+			return 2
+		}
+		if err := ValidateArtifacts(dir); err != nil {
+			r.Fail("artifacts", err.Error(), "fix storctl-artifacts.json or artifact files")
+			return 1
+		}
+		r.OK("artifacts %s valid", dir)
+		return 0
 	case "install-driver":
 		cfg, err := parseInstallDriver(args[1:])
 		if err != nil {
@@ -62,12 +107,24 @@ func printHelp(w io.Writer) {
 	fmt.Fprint(w, `storctl - join a lab host to NFS-RDMA storage
 
 usage:
+  storctl version [--json]
+  storctl generate-manifest --artifact-dir DIR --os-id ID --os-version-prefix VERSION --arch ARCH
+  storctl validate-profile --profile-file PATH
+  storctl validate-artifacts --artifact-dir DIR
   storctl install-driver --nic-type cx7|1823 --artifact-dir DIR
   storctl plan --profile NAME --nic NIC [flags]
   storctl apply --nic NIC --vlan-id ID --data-ip CIDR --gateway IP --mount SERVER:/EXPORT:/MOUNT[:OPTS] [flags]
   storctl apply --profile NAME --nic NIC [flags]
-  storctl check
+  storctl check [--json]
   storctl help
+
+read-only commands:
+  plan, check, version, generate-manifest, validate-profile, validate-artifacts
+  These do not mutate the host and do not require root.
+
+mutating commands:
+  install-driver, apply
+  These mutate the host and require root.
 
 common flags:
   --profile NAME                 load profile from storctl-profiles.json
@@ -82,6 +139,7 @@ common flags:
   --upgrade-firmware            install-driver only; firmware upgrade is off unless this is set
   --allow-repo                  install-driver only; permit artifacts that need a configured dnf repo
   --allow-tcp-fallback          explicitly mount TCP NFS when RDMA is unavailable
+  --qos off|apply               default: off
   --mount SPEC                  repeatable; default opts are NFS-RDMA
 
 example:

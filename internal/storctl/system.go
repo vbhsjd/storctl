@@ -10,7 +10,10 @@ import (
 	"time"
 )
 
+const stateSchemaVersion = 1
+
 type State struct {
+	SchemaVersion   int         `json:"schema_version"`
 	UpdatedAt       time.Time   `json:"updated_at"`
 	NIC             string      `json:"nic"`
 	NICType         string      `json:"nic_type"`
@@ -19,6 +22,7 @@ type State struct {
 	Gateway         string      `json:"gateway"`
 	RouteTable      int         `json:"route_table"`
 	MTU             int         `json:"mtu"`
+	QoSMode         string      `json:"qos_mode"`
 	Mounts          []MountSpec `json:"mounts"`
 	RebootRequired  bool        `json:"reboot_required"`
 	SystemdDetected bool        `json:"systemd_detected"`
@@ -101,6 +105,7 @@ func writeFileChanged(path string, data []byte, mode os.FileMode) (bool, error) 
 
 func saveState(cfg Config, nicType string, rebootRequired, systemd bool, degraded bool, degradedReason string) error {
 	state := State{
+		SchemaVersion:   stateSchemaVersion,
 		UpdatedAt:       time.Now(),
 		NIC:             cfg.NIC,
 		NICType:         nicType,
@@ -109,6 +114,7 @@ func saveState(cfg Config, nicType string, rebootRequired, systemd bool, degrade
 		Gateway:         cfg.Gateway,
 		RouteTable:      cfg.RouteTable,
 		MTU:             cfg.MTU,
+		QoSMode:         cfg.QoSMode,
 		Mounts:          cfg.Mounts,
 		RebootRequired:  rebootRequired,
 		SystemdDetected: systemd,

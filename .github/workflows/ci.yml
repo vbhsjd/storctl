@@ -1,0 +1,53 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Test
+        run: go test ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build and smoke
+        run: |
+          go build -ldflags "-X storctl/internal/storctl.Version=ci -X storctl/internal/storctl.Commit=${GITHUB_SHA} -X storctl/internal/storctl.BuiltAt=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o storctl ./cmd/storctl
+          ./storctl version --json | grep '"version": "ci"'
+          ./storctl check --json >/tmp/storctl-check.json
+
+      - name: Manifest smoke
+        run: |
+          tmp="$(mktemp -d)"
+          printf cx7 > "${tmp}/MLNX_OFED_LINUX-test.tgz"
+          printf hinic > "${tmp}/nic_1823-test.tar.gz"
+          ./storctl generate-manifest --artifact-dir "${tmp}" --os-id openEuler --os-version-prefix 22.03 --arch aarch64 > "${tmp}/storctl-artifacts.json"
+          ./storctl validate-artifacts --artifact-dir "${tmp}"
+
+      - name: Release archive smoke
+        run: |
+          GOOS=linux GOARCH=arm64 go build -o storctl-linux-arm64 ./cmd/storctl
+          sha256sum storctl-linux-arm64 > storctl-linux-arm64.sha256
+          zip -9 storctl-linux-arm64.zip \
+            storctl-linux-arm64 \
+            storctl-linux-arm64.sha256 \
+            README.md \
+            README.en.md \
+            CHANGELOG.md \
+            LICENSE \
+            storctl-profiles.example.json \
+            storctl-artifacts.example.json \
+            docs/offline-driver-matrix.md
+          unzip -l storctl-linux-arm64.zip | grep CHANGELOG.md
