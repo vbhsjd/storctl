@@ -14,6 +14,60 @@ checks whether the driver is ready; it does not install drivers or fetch
 packages. Pre-distribute artifacts with Ansible/scp, then run
 `storctl install-driver` explicitly.
 
+## Design Principles
+
+`storctl` follows the Unix style: do one host-local storage onboarding job well,
+with clear output, reliable exit codes, and behavior that composes with other
+tools.
+
+It is responsible for:
+
+- Resolving the final host configuration from a profile.
+- Checking local OS, NIC type, driver, RDMA, QoS, and mount state.
+- Idempotently configuring NetworkManager VLANs, routing rules, QoS, and NFS
+  mount persistence.
+- Selecting a local driver artifact that matches the host OS, architecture, and
+  NIC type.
+- Printing step-level `OK / SKIP / WARN / FAIL` output.
+
+It is not responsible for:
+
+- SSHing to multiple machines.
+- Distributing the binary, profiles, or driver artifacts.
+- Maintaining cross-lab yum/dnf repositories.
+- Managing Ansible inventory.
+- Guessing which one of several 200G ports is the correct storage port.
+
+Batch orchestration belongs in Ansible or similar systems. `storctl` is the
+single-host command they call.
+
+## NIC Selection
+
+`--nic` must be an explicit physical interface name, such as `enp23s0f1` or
+`enp194s0f1np1`. `storctl` intentionally does not support `--nic auto`.
+
+Many hosts have two 200G ports. Choosing the wrong storage port is more costly
+than passing one inventory variable.
+
+Useful commands for choosing the NIC:
+
+```bash
+ip -br link
+ibdev2netdev
+hinicadm3 info
+ethtool <nic> | grep -i speed
+```
+
+Recommended Ansible inventory shape:
+
+```ini
+node-39-149 ansible_host=80.5.17.113 storage_nic=enp23s0f1 nic_type=1823 storage_profile=c4
+node-25-146 ansible_host=80.5.25.146 storage_nic=enp194s0f1np1 nic_type=cx7 storage_profile=c25
+```
+
+`--nic-type auto` is still useful. It only detects whether the already selected
+`--nic` is `cx7` or `1823`; it never selects the NIC for you.
+
 ## Quick Start
 
 Explicit single-host mode:
@@ -119,23 +173,30 @@ data IP derivation, and repeated `--mount` flags replace profile mounts.
 
 ## Batch Usage
 
-Recommended Ansible shape:
+Recommended Ansible shape. Inventory carries per-host differences; profiles
+carry cluster-level defaults:
 
 ```bash
 ansible all -m copy -a "src=storctl-linux-arm64 dest=/usr/local/bin/storctl mode=0755"
 ansible all -m copy -a "src=storage_pkgs/ dest=/root/storage_pkgs/"
 ansible all -m copy -a "src=storctl-profiles.json dest=/etc/storctl/profiles.json"
 ansible all -m shell -a "storctl install-driver --nic-type {{ nic_type }} --artifact-dir /root/storage_pkgs"
-ansible all -m shell -a "storctl plan --profile c4 --nic {{ storage_nic }} --mgmt-ip {{ ansible_host }}"
-ansible all -m shell -a "storctl apply --profile c4 --nic {{ storage_nic }} --mgmt-ip {{ ansible_host }}"
-```
-
-For mixed clusters, create one profile per cluster and pass the profile name
-from inventory:
-
-```bash
+ansible all -m shell -a "storctl plan --profile {{ storage_profile }} --nic {{ storage_nic }} --mgmt-ip {{ ansible_host }}"
 ansible all -m shell -a "storctl apply --profile {{ storage_profile }} --nic {{ storage_nic }} --mgmt-ip {{ ansible_host }}"
 ```
+
+Minimum inventory variables:
+
+```yaml
+storage_nic: enp23s0f1
+nic_type: 1823
+storage_profile: c4
+ansible_host: 80.5.17.113
+```
+
+Keep `vlan_id`, `gateway`, `route_table`, `mounts`, and data-IP derivation rules
+in the profile. Keep `storage_nic` in inventory. That boundary keeps failures
+easy to reason about.
 
 ## Build
 

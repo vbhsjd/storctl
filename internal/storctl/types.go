@@ -202,6 +202,9 @@ func (c Config) Validate() error {
 	if c.NIC == "" {
 		return errors.New("--nic is required")
 	}
+	if c.NIC == "auto" {
+		return errors.New("--nic must be an explicit interface name; auto selection is intentionally unsupported")
+	}
 	switch c.NICType {
 	case "auto", "cx7", "1823":
 	default:

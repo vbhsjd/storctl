@@ -43,3 +43,24 @@ func TestIsOpenEulerCaseInsensitive(t *testing.T) {
 		t.Fatal("openEuler should be detected case-insensitively")
 	}
 }
+
+func TestConfigRejectsAutoNIC(t *testing.T) {
+	cfg := Config{
+		NIC:        "auto",
+		NICType:    "auto",
+		VLANID:     172,
+		DataCIDR:   "172.27.4.113/18",
+		Gateway:    "172.27.0.1",
+		RouteTable: 5000,
+		MTU:        5500,
+		Mounts: []MountSpec{{
+			Server:     "172.27.1.1",
+			Export:     "/Share",
+			MountPoint: "/mnt/share",
+			Options:    defaultNFSOptions,
+		}},
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected --nic auto to be rejected")
+	}
+}
