@@ -12,6 +12,16 @@ func Main(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	switch args[0] {
+	case "facts":
+		jsonOut, err := parseFacts(args[1:])
+		if err != nil {
+			r.Fail("args", err.Error(), "run: storctl help")
+			return 2
+		}
+		if err := Facts(jsonOut, stdout, NewOSRunner("", "")); err != nil {
+			return 1
+		}
+		return 0
 	case "version":
 		jsonOut, err := parseVersion(args[1:])
 		if err != nil {
@@ -108,6 +118,7 @@ func printHelp(w io.Writer) {
 
 usage:
   storctl version [--json]
+  storctl facts [--json]
   storctl generate-manifest --artifact-dir DIR --os-id ID --os-version-prefix VERSION --arch ARCH
   storctl validate-profile --profile-file PATH
   storctl validate-artifacts --artifact-dir DIR
@@ -119,7 +130,7 @@ usage:
   storctl help
 
 read-only commands:
-  plan, check, version, generate-manifest, validate-profile, validate-artifacts
+  plan, check, facts, version, generate-manifest, validate-profile, validate-artifacts
   These do not mutate the host and do not require root.
 
 mutating commands:

@@ -1,6 +1,7 @@
 package storctl
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -150,7 +151,7 @@ func readProfiles(path string) (ProfilesFile, error) {
 }
 
 func ValidateProfiles(path string) error {
-	profiles, err := readProfiles(path)
+	profiles, err := readProfilesStrict(path)
 	if err != nil {
 		return err
 	}
@@ -188,6 +189,23 @@ func ValidateProfiles(path string) error {
 		}
 	}
 	return nil
+}
+
+func readProfilesStrict(path string) (ProfilesFile, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ProfilesFile{}, err
+	}
+	var profiles ProfilesFile
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&profiles); err != nil {
+		return ProfilesFile{}, err
+	}
+	if len(profiles.Profiles) == 0 {
+		return ProfilesFile{}, fmt.Errorf("profile file has no profiles")
+	}
+	return profiles, nil
 }
 
 func resolveManagementIP(explicit string) (net.IP, error) {

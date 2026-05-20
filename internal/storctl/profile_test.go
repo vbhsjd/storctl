@@ -91,6 +91,31 @@ func TestProfileQoSEnablesApplyMode(t *testing.T) {
 	}
 }
 
+func TestValidateProfileRejectsUnknownFields(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "storctl-profiles.json")
+	data := `{
+  "profiles": {
+    "c4": {
+      "vlan_id": 172,
+      "gateway": "172.27.0.1",
+      "prefix": 18,
+      "third_octet_map": {"17": 4},
+      "mounts": [
+        {"server": "172.27.1.1", "export": "/Share", "mount_point": "/mnt/share"}
+      ],
+      "typo_field": true
+    }
+  }
+}`
+	if err := os.WriteFile(path, []byte(data), 0644); err != nil {
+		t.Fatal(err)
+	}
+	err := ValidateProfiles(path)
+	if err == nil || !strings.Contains(err.Error(), "unknown field") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestMissingThirdOctetMappingFails(t *testing.T) {
 	path := writeTestProfile(t)
 	_, err := parsePlan([]string{

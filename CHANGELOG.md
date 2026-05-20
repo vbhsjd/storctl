@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.5.0
+
+### Added
+
+- `storctl facts` and `storctl facts --json` for collecting host facts without changing the host.
+- Richer `check --json` details for state, OS, RDMA links, driver readiness, QoS mode, artifacts, links, and mounts.
+- Strict profile validation that rejects unknown JSON fields.
+- Artifact validation now reports multiple manifest/file/checksum problems at once.
+
+### Changed
+
+- `state.json` records `artifact_dir` for later check visibility.
+
 ## v0.4.0
 
 ### Changed

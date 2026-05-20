@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -186,25 +187,31 @@ func ValidateArtifacts(dir string) error {
 	if err != nil {
 		return err
 	}
+	problems := []string{}
 	for _, artifact := range manifest.Artifacts {
 		if artifact.File == "" {
-			return fmt.Errorf("artifact file is required")
+			problems = append(problems, "artifact file is required")
+			continue
 		}
 		path := filepath.Join(dir, artifact.File)
 		if _, err := os.Stat(path); err != nil {
-			return fmt.Errorf("artifact file missing: %s", path)
+			problems = append(problems, fmt.Sprintf("artifact file missing: %s", path))
+			continue
 		}
 		if artifact.OSID == "" || artifact.OSVersionPrefix == "" || artifact.Arch == "" || artifact.NICType == "" {
-			return fmt.Errorf("artifact %s missing os_id/os_version_prefix/arch/nic_type", artifact.File)
+			problems = append(problems, fmt.Sprintf("artifact %s missing os_id/os_version_prefix/arch/nic_type", artifact.File))
 		}
 		if artifact.NICType != "cx7" && artifact.NICType != "1823" {
-			return fmt.Errorf("artifact %s has unsupported nic_type %s", artifact.File, artifact.NICType)
+			problems = append(problems, fmt.Sprintf("artifact %s has unsupported nic_type %s", artifact.File, artifact.NICType))
 		}
 		if artifact.SHA256 != "" {
 			if err := verifySHA256(path, artifact.SHA256); err != nil {
-				return err
+				problems = append(problems, err.Error())
 			}
 		}
+	}
+	if len(problems) > 0 {
+		return errors.New(strings.Join(problems, "; "))
 	}
 	return nil
 }

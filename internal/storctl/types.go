@@ -392,6 +392,19 @@ func parseVersion(args []string) (bool, error) {
 	return jsonOut, nil
 }
 
+func parseFacts(args []string) (bool, error) {
+	var jsonOut bool
+	fs := flag.NewFlagSet("facts", flag.ContinueOnError)
+	fs.BoolVar(&jsonOut, "json", false, "output stable JSON")
+	if err := fs.Parse(args); err != nil {
+		return false, err
+	}
+	if fs.NArg() != 0 {
+		return false, fmt.Errorf("unexpected argument: %s", fs.Arg(0))
+	}
+	return jsonOut, nil
+}
+
 func parsePositiveInt(raw string) (int, bool) {
 	n, err := strconv.Atoi(raw)
 	return n, err == nil && n > 0

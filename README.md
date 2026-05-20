@@ -38,6 +38,7 @@
 | --- | --- | --- |
 | `plan` | no | no |
 | `check` | no | no |
+| `facts` | no | no |
 | `version` | no | no |
 | `generate-manifest` | no | no |
 | `validate-profile` | no | no |
@@ -98,6 +99,7 @@ storctl apply --profile c4 --nic enp23s0f1 --mgmt-ip 80.5.17.113
 ```bash
 storctl check
 storctl check --json
+storctl facts --json
 storctl version --json
 ```
 
@@ -225,6 +227,7 @@ ansible all -m shell -a "storctl apply --profile {{ storage_profile }} --nic {{ 
 
 ```bash
 ansible all -m shell -a "storctl check --json"
+ansible all -m shell -a "storctl facts --json"
 ```
 
 `check --json` 每条检查都有稳定字段：
@@ -237,6 +240,8 @@ ansible all -m shell -a "storctl check --json"
   "summary": {"ok": 0, "warn": 1, "fail": 0}
 }
 ```
+
+`facts --json` 只采集本机事实，不判断接入是否成功，适合批量盘点 OS、命令可用性、网卡、RDMA link、systemd 等基础信息。
 
 最小 inventory 变量：
 
@@ -315,6 +320,8 @@ storctl generate-manifest \
 storctl validate-profile --profile-file /etc/storctl/profiles.json
 storctl validate-artifacts --artifact-dir /root/storage_pkgs
 ```
+
+`validate-profile` 会拒绝未知字段，适合在多人维护 profile 时提前发现拼写错误。`validate-artifacts` 会一次性列出缺失文件、错误网卡类型和 sha256 不匹配等问题。
 
 - CX7 优先使用真离线的 `MLNX_OFED_LINUX-*.tgz` 或 `IB_NIC-*.tgz`。
 - 1823 支持 `nic_1823.tar.gz` 或 `hinic*.tar.gz`。

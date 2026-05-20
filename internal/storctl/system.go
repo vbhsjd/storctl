@@ -22,6 +22,7 @@ type State struct {
 	Gateway         string      `json:"gateway"`
 	RouteTable      int         `json:"route_table"`
 	MTU             int         `json:"mtu"`
+	ArtifactDir     string      `json:"artifact_dir,omitempty"`
 	QoSMode         string      `json:"qos_mode"`
 	Mounts          []MountSpec `json:"mounts"`
 	RebootRequired  bool        `json:"reboot_required"`
@@ -114,6 +115,7 @@ func saveState(cfg Config, nicType string, rebootRequired, systemd bool, degrade
 		Gateway:         cfg.Gateway,
 		RouteTable:      cfg.RouteTable,
 		MTU:             cfg.MTU,
+		ArtifactDir:     cfg.ArtifactDir,
 		QoSMode:         cfg.QoSMode,
 		Mounts:          cfg.Mounts,
 		RebootRequired:  rebootRequired,

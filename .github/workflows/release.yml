@@ -28,6 +28,7 @@ jobs:
           go build -ldflags "-X storctl/internal/storctl.Version=${GITHUB_REF_NAME} -X storctl/internal/storctl.Commit=${GITHUB_SHA} -X storctl/internal/storctl.BuiltAt=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o storctl-smoke ./cmd/storctl
           ./storctl-smoke version --json | grep "${GITHUB_REF_NAME}"
           ./storctl-smoke check --json >/tmp/storctl-check.json
+          ./storctl-smoke facts --json >/tmp/storctl-facts.json
 
       - name: Build linux arm64
         run: |

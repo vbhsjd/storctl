@@ -75,7 +75,10 @@ ansible all -m shell -a "storctl install-driver --nic-type {{ nic_type }} --arti
 ansible all -m shell -a "storctl plan --profile {{ storage_profile }} --nic {{ storage_nic }} --mgmt-ip {{ ansible_host }}"
 ansible all -m shell -a "storctl apply --profile {{ storage_profile }} --nic {{ storage_nic }} --mgmt-ip {{ ansible_host }}"
 ansible all -m shell -a "storctl check --json"
+ansible all -m shell -a "storctl facts --json"
 ```
+
+`facts --json` 适合接入前盘点系统版本、命令可用性、网卡和 RDMA link；`check --json` 适合接入后判断是否成功、是否降级。
 
 ## TCP 降级策略
 

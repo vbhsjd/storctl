@@ -107,3 +107,25 @@ func TestGenerateManifest(t *testing.T) {
 		t.Fatalf("doca-host artifact not marked requires_repo: %+v", manifest.Artifacts)
 	}
 }
+
+func TestValidateArtifactsReportsMultipleProblems(t *testing.T) {
+	dir := t.TempDir()
+	manifest := ArtifactManifest{Artifacts: []Artifact{
+		{OSID: "openEuler", OSVersionPrefix: "22.03", Arch: "aarch64", NICType: "bad", File: "missing.tgz"},
+		{OSID: "openEuler", OSVersionPrefix: "22.03", Arch: "aarch64", NICType: "cx7", File: "cx7.tgz", SHA256: strings.Repeat("0", 64)},
+	}}
+	if err := os.WriteFile(filepath.Join(dir, "cx7.tgz"), []byte("driver"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, artifactManifestName), data, 0644); err != nil {
+		t.Fatal(err)
+	}
+	err = ValidateArtifacts(dir)
+	if err == nil || !containsAll(err.Error(), "missing.tgz", "sha256 mismatch") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

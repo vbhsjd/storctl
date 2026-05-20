@@ -50,6 +50,7 @@ troubleshooting; JSON is the stable machine interface.
 | --- | --- | --- |
 | `plan` | no | no |
 | `check` | no | no |
+| `facts` | no | no |
 | `version` | no | no |
 | `generate-manifest` | no | no |
 | `validate-profile` | no | no |
@@ -113,6 +114,7 @@ Check the current host:
 ```bash
 storctl check
 storctl check --json
+storctl facts --json
 storctl version --json
 ```
 
@@ -244,6 +246,7 @@ Collect status with stable JSON:
 
 ```bash
 ansible all -m shell -a "storctl check --json"
+ansible all -m shell -a "storctl facts --json"
 ```
 
 Each check has stable fields:
@@ -256,6 +259,10 @@ Each check has stable fields:
   "summary": {"ok": 0, "warn": 1, "fail": 0}
 }
 ```
+
+`facts --json` only collects host facts. It does not judge whether onboarding
+succeeded, and is useful for batch inventory of OS, command availability,
+interfaces, RDMA links, and systemd.
 
 Minimum inventory variables:
 
@@ -339,6 +346,10 @@ Validate inputs:
 storctl validate-profile --profile-file /etc/storctl/profiles.json
 storctl validate-artifacts --artifact-dir /root/storage_pkgs
 ```
+
+`validate-profile` rejects unknown JSON fields so typos fail early.
+`validate-artifacts` reports missing files, unsupported NIC types, and checksum
+problems together.
 
 - CX7 prefers true offline `MLNX_OFED_LINUX-*.tgz` or `IB_NIC-*.tgz` bundles.
 - 1823 supports `nic_1823.tar.gz` or `hinic*.tar.gz`.

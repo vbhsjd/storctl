@@ -27,6 +27,7 @@ jobs:
           go build -ldflags "-X storctl/internal/storctl.Version=ci -X storctl/internal/storctl.Commit=${GITHUB_SHA} -X storctl/internal/storctl.BuiltAt=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o storctl ./cmd/storctl
           ./storctl version --json | grep '"version": "ci"'
           ./storctl check --json >/tmp/storctl-check.json
+          ./storctl facts --json >/tmp/storctl-facts.json
 
       - name: Manifest smoke
         run: |
