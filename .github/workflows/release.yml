@@ -35,4 +35,4 @@ jobs:
             storctl-linux-arm64.zip \
             storctl-linux-arm64.sha256 \
             --title "storctl ${GITHUB_REF_NAME}" \
-            --notes "Initial storctl CLI with NetworkManager, CX7/1823 QoS, DOCA-OFED, and NFS-RDMA mount support."
+            --notes "storctl CLI with profile-driven NetworkManager VLAN, CX7/1823 QoS, offline driver artifacts, and explicit NFS-RDMA/TCP fallback handling."
