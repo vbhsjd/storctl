@@ -29,6 +29,10 @@ func Apply(cfg Config, r *Reporter, runner Runner) error {
 		return err
 	}
 	r.OK("nic %s found", cfg.NIC)
+	if err := guardManagementNIC(cfg, runner); err != nil {
+		r.Fail("nic "+cfg.NIC, err.Error(), "pass the 200G storage NIC, not the SSH management NIC")
+		return err
+	}
 
 	nicType, err := resolveNICType(cfg, runner)
 	if err != nil {

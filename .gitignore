@@ -1,5 +1,7 @@
-/storctl
-/storctl-linux-*
-*.zip
-*.tar.gz
 .DS_Store
+.gocache/
+auto.tar.gz
+/storctl
+/storctl-compose/
+/storctl-linux-arm64
+/storctl-linux-arm64.zip

@@ -40,6 +40,7 @@ type ProfileMount struct {
 
 func resolveConfig(flags configFlags) (Config, error) {
 	cfg := flags.Config
+	cfg.MgmtIP = strings.TrimSpace(flags.MgmtIP)
 	cfg.Mounts = []MountSpec(flags.Mounts)
 
 	if flags.Profile != "" {
@@ -53,6 +54,7 @@ func resolveConfig(flags configFlags) (Config, error) {
 			if err != nil {
 				return Config{}, err
 			}
+			cfg.MgmtIP = mgmtIP.String()
 			dataCIDR, err := deriveDataCIDR(mgmtIP, profile)
 			if err != nil {
 				return Config{}, err

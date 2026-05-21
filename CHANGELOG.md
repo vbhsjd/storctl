@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `apply` now fails before NetworkManager changes when `--nic` owns the
+  `--mgmt-ip`, preventing accidental SSH management NIC reconfiguration.
+
 ## v0.5.0
 
 ### Added

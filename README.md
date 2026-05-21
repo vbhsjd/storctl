@@ -70,6 +70,8 @@ node-25-146 ansible_host=80.5.25.146 storage_nic=enp194s0f1np1 nic_type=cx7 stor
 
 `--nic-type auto` 可以保留使用。它只是在 `--nic` 已经明确之后，判断这张网卡是 `cx7` 还是 `1823`；它不会替你选择网卡。
 
+如果使用 profile 并传了 `--mgmt-ip`，`apply` 会在修改 NetworkManager 前检查 `--nic` 是否就是管理 IP 所在网卡。命中时会直接失败，避免把 SSH 管理口误配置成存储 VLAN 口。
+
 ## 快速开始
 
 单机显式参数模式：

@@ -85,6 +85,11 @@ node-25-146 ansible_host=80.5.25.146 storage_nic=enp194s0f1np1 nic_type=cx7 stor
 `--nic-type auto` is still useful. It only detects whether the already selected
 `--nic` is `cx7` or `1823`; it never selects the NIC for you.
 
+When a profile run uses `--mgmt-ip`, `apply` checks whether `--nic` already
+owns that management IP before touching NetworkManager. If it does, the command
+fails early so the SSH management interface is not reconfigured as a storage
+VLAN interface.
+
 ## Quick Start
 
 Explicit single-host mode:

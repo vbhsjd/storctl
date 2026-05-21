@@ -19,6 +19,7 @@ const (
 type Config struct {
 	NIC              string
 	NICType          string
+	MgmtIP           string
 	VLANID           int
 	DataCIDR         string
 	Gateway          string
