@@ -199,7 +199,8 @@ func install1823Artifact(pkg string, upgradeFirmware bool, r *Reporter, runner R
 	if _, err := runner.Run("tar", "xf", pkg, "-C", work); err != nil {
 		return false, err
 	}
-	if _, err := runner.Sh(fmt.Sprintf("cd %s/* && rpm -Uvh *.rpm", work)); err != nil {
+	cmd := fmt.Sprintf("install_sh=$(find %s -maxdepth 3 -type f -name install.sh -print -quit); [ -n \"$install_sh\" ] || { echo 'install.sh not found'; exit 1; }; cd \"$(dirname \"$install_sh\")\" && bash install.sh roce", work)
+	if _, err := runner.Sh(cmd); err != nil {
 		return false, err
 	}
 	if upgradeFirmware {

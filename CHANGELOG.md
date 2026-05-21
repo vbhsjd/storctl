@@ -7,6 +7,8 @@
 - `apply` now fails before NetworkManager changes when `--nic` owns the
   `--mgmt-ip`, preventing accidental SSH management NIC reconfiguration.
 - Added a detailed Chinese single-host tutorial under `docs/tutorial.md`.
+- 1823 driver installation now uses the SDK installer entrypoint
+  `bash install.sh roce` after extracting the artifact.
 
 ## v0.5.0
 

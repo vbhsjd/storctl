@@ -5,7 +5,7 @@
 ## 推荐取舍
 
 - 默认不维护跨实验室公网仓库。每个实验室通过 Ansible/scp 预分发 `storage_pkgs/`。
-- 优先选择真离线包：CX7 用 `MLNX_OFED_LINUX-*.tgz` 或 `IB_NIC-*.tgz`，1823 用 `nic_1823*.tar.gz` 或 `hinic*.tar.gz`。
+- 优先选择真离线包：CX7 用 `MLNX_OFED_LINUX-*.tgz` 或 `IB_NIC-*.tgz`，1823 用 `SDK_LINUX-*.tar.gz`、`nic_1823*.tar.gz` 或 `hinic*.tar.gz`。
 - `doca-host*.rpm` 是 repo installer，不是真离线包。只有实验室已经准备好 dnf repo 时，才在 manifest 里标记 `requires_repo: true`，并运行 `storctl install-driver --allow-repo`。
 - `apply` 不安装驱动。驱动没就绪时失败，并提示先运行 `storctl install-driver`。
 - `--nic` 必须由 inventory 或人工显式指定。`storctl` 不做 `--nic auto`，避免在双口 200G 机器上猜错业务口。
@@ -16,7 +16,7 @@
 /root/storage_pkgs/
   storctl-artifacts.json
   MLNX_OFED_LINUX-5.8-1.1.2.1-openeuler22.03-aarch64.tgz
-  nic_1823-openeuler22.03-aarch64.tar.gz
+  SDK_LINUX-17.12.5.0-openEuler24.03SP2-aarch64.tar.gz
 ```
 
 生成 manifest：

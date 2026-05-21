@@ -174,7 +174,7 @@ func classifyArtifact(name string) (nicType string, requiresRepo bool, ok bool) 
 		if strings.HasSuffix(low, ".tgz") || strings.HasSuffix(low, ".tar.gz") {
 			return "cx7", false, true
 		}
-	case strings.HasPrefix(low, "nic_1823") || strings.HasPrefix(low, "hinic"):
+	case strings.HasPrefix(low, "nic_1823") || strings.HasPrefix(low, "hinic") || strings.HasPrefix(low, "sdk_linux-"):
 		if strings.HasSuffix(low, ".tgz") || strings.HasSuffix(low, ".tar.gz") {
 			return "1823", false, true
 		}

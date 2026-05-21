@@ -66,6 +66,7 @@ func TestGenerateManifest(t *testing.T) {
 	files := map[string]string{
 		"MLNX_OFED_LINUX-test.tgz": "cx7",
 		"nic_1823-test.tar.gz":     "1823",
+		"SDK_LINUX-test.tar.gz":    "1823-sdk",
 		"doca-host-test.rpm":       "doca",
 		"ignore.txt":               "ignore",
 	}
@@ -91,7 +92,7 @@ func TestGenerateManifest(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &manifest); err != nil {
 		t.Fatal(err)
 	}
-	if len(manifest.Artifacts) != 3 {
+	if len(manifest.Artifacts) != 4 {
 		t.Fatalf("Artifacts len = %d", len(manifest.Artifacts))
 	}
 	foundRepo := false
