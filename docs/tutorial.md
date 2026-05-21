@@ -271,6 +271,7 @@ storctl apply ... --allow-tcp-fallback
 
 这种情况下：
 
+- RDMA driver/link 尚未 ready 时，也会继续配置网络并尝试 TCP NFS。
 - 挂载会使用 TCP NFS。
 - `/var/lib/storctl/state.json` 会记录 degraded 状态。
 - `storctl check` 会输出 `WARN degraded tcp-fallback`。
@@ -357,4 +358,3 @@ nfsstat -m
 - `rdma link` 非空。
 - `mount` 或 `findmnt` 显示挂载为 `proto=rdma`。
 - 重启后 VLAN 和挂载仍然存在。
-

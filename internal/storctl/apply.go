@@ -41,7 +41,8 @@ func Apply(cfg Config, r *Reporter, runner Runner) error {
 	}
 	r.OK("nic type %s", nicType)
 
-	if err := ensureDriverReady(cfg, nicType, r, runner); err != nil {
+	driverReady, err := ensureApplyDriverReady(cfg, nicType, r, runner)
+	if err != nil {
 		r.Fail("driver "+nicType, err.Error(), "run: storctl install-driver --nic-type "+nicType+" --artifact-dir "+cfg.ArtifactDir)
 		return err
 	}
@@ -50,7 +51,9 @@ func Apply(cfg Config, r *Reporter, runner Runner) error {
 		r.Fail("vlan "+cfg.vlanName(), err.Error(), "run: nmcli con show && ip addr")
 		return err
 	}
-	if err := configureQoS(cfg, nicType, r, runner); err != nil {
+	if !driverReady && cfg.QoSMode == "apply" {
+		r.Skip("qos driver not ready")
+	} else if err := configureQoS(cfg, nicType, r, runner); err != nil {
 		r.Fail("qos "+nicType, err.Error(), "check switch PFC/DSCP and NIC tools")
 		return err
 	}
@@ -78,4 +81,15 @@ func requireCommand(r Runner, name string) error {
 		return fmt.Errorf("%s not found", name)
 	}
 	return nil
+}
+
+func ensureApplyDriverReady(cfg Config, nicType string, r *Reporter, runner Runner) (bool, error) {
+	if err := ensureDriverReady(cfg, nicType, r, runner); err != nil {
+		if !cfg.AllowTCPFallback {
+			return false, err
+		}
+		r.Warn("driver %s not ready, using explicit tcp fallback: %v", nicType, err)
+		return false, nil
+	}
+	return true, nil
 }

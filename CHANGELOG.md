@@ -9,6 +9,8 @@
 - Added a detailed Chinese single-host tutorial under `docs/tutorial.md`.
 - 1823 driver installation now uses the SDK installer entrypoint
   `bash install.sh roce` after extracting the artifact.
+- `apply --allow-tcp-fallback` now continues past RDMA driver readiness
+  failures and records the mount as degraded TCP fallback.
 
 ## v0.5.0
 
