@@ -74,6 +74,8 @@ node-25-146 ansible_host=80.5.25.146 storage_nic=enp194s0f1np1 nic_type=cx7 stor
 
 ## 快速开始
 
+完整单机教程见 [docs/tutorial.md](docs/tutorial.md)。
+
 单机显式参数模式：
 
 ```bash

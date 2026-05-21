@@ -92,6 +92,8 @@ VLAN interface.
 
 ## Quick Start
 
+For a detailed single-host walkthrough, see [docs/tutorial.md](docs/tutorial.md).
+
 Explicit single-host mode:
 
 ```bash
