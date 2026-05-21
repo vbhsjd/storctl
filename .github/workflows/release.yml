@@ -43,8 +43,10 @@ jobs:
             LICENSE \
             storctl-profiles.example.json \
             storctl-artifacts.example.json \
+            docs/tutorial.md \
             docs/offline-driver-matrix.md
           unzip -l storctl-linux-arm64.zip | grep README.en.md
+          unzip -l storctl-linux-arm64.zip | grep docs/tutorial.md
           unzip -l storctl-linux-arm64.zip | grep docs/offline-driver-matrix.md
 
       - name: Release notes
