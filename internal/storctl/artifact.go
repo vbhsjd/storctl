@@ -92,7 +92,7 @@ func selectArtifactFromManifestForOS(manifest ArtifactManifest, dir string, osIn
 			return Artifact{}, fmt.Errorf("ambiguous artifacts match os=%s version=%s arch=%s nic_type=%s with same specificity: %s, %s", osInfo.ID, displayOSVersion(osInfo), arch, nicType, file, artifact.File)
 		}
 	}
-	if _, err := os.Stat(filepath.Join(dir, file)); err != nil {
+	if _, err := os.Stat(hostPath(filepath.Join(dir, file))); err != nil {
 		return Artifact{}, fmt.Errorf("matched artifact file missing: %s", filepath.Join(dir, file))
 	}
 	return matches[0], nil
@@ -146,7 +146,7 @@ func displayOSVersion(osInfo OSInfo) string {
 }
 
 func readArtifactManifest(path string) (ArtifactManifest, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(hostPath(path))
 	if err != nil {
 		return ArtifactManifest{}, fmt.Errorf("read %s: %w", path, err)
 	}
@@ -161,6 +161,11 @@ func readArtifactManifest(path string) (ArtifactManifest, error) {
 }
 
 func artifactArch() string {
+	if simMode() {
+		if arch := strings.TrimSpace(os.Getenv("STORCTL_SIM_ARCH")); arch != "" {
+			return arch
+		}
+	}
 	switch runtime.GOARCH {
 	case "arm64":
 		return "aarch64"
@@ -183,7 +188,7 @@ func verifySHA256(path, expected string) error {
 }
 
 func sha256File(path string) (string, error) {
-	file, err := os.Open(path)
+	file, err := os.Open(hostPath(path))
 	if err != nil {
 		return "", err
 	}
@@ -203,7 +208,8 @@ type ManifestGenerateConfig struct {
 }
 
 func GenerateManifest(cfg ManifestGenerateConfig, out io.Writer, errw io.Writer) error {
-	entries, err := os.ReadDir(cfg.ArtifactDir)
+	artifactDir := hostPath(cfg.ArtifactDir)
+	entries, err := os.ReadDir(artifactDir)
 	if err != nil {
 		return err
 	}
@@ -217,7 +223,7 @@ func GenerateManifest(cfg ManifestGenerateConfig, out io.Writer, errw io.Writer)
 			fmt.Fprintf(errw, "WARN artifact ignored %s\n", entry.Name())
 			continue
 		}
-		sum, err := sha256File(filepath.Join(cfg.ArtifactDir, entry.Name()))
+		sum, err := sha256File(filepath.Join(artifactDir, entry.Name()))
 		if err != nil {
 			return err
 		}
@@ -271,7 +277,7 @@ func ValidateArtifacts(dir string) error {
 			continue
 		}
 		path := filepath.Join(dir, artifact.File)
-		if _, err := os.Stat(path); err != nil {
+		if _, err := os.Stat(hostPath(path)); err != nil {
 			problems = append(problems, fmt.Sprintf("artifact file missing: %s", path))
 			continue
 		}

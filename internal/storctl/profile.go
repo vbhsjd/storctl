@@ -129,7 +129,7 @@ func loadProfiles(path string) (ProfilesFile, string, error) {
 		return profiles, path, err
 	}
 	for _, candidate := range []string{localProfilePath, systemProfilePath} {
-		if _, err := os.Stat(candidate); err == nil {
+		if _, err := os.Stat(hostPath(candidate)); err == nil {
 			profiles, err := readProfiles(candidate)
 			return profiles, candidate, err
 		}
@@ -138,7 +138,7 @@ func loadProfiles(path string) (ProfilesFile, string, error) {
 }
 
 func readProfiles(path string) (ProfilesFile, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(hostPath(path))
 	if err != nil {
 		return ProfilesFile{}, err
 	}
@@ -194,7 +194,7 @@ func ValidateProfiles(path string) error {
 }
 
 func readProfilesStrict(path string) (ProfilesFile, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(hostPath(path))
 	if err != nil {
 		return ProfilesFile{}, err
 	}
@@ -236,6 +236,9 @@ func resolveManagementIP(explicit string) (net.IP, error) {
 }
 
 func candidateManagementIPs() ([]net.IP, error) {
+	if simMode() {
+		return simManagementIPs(), nil
+	}
 	ifaces, err := net.Interfaces()
 	if err != nil {
 		return nil, err

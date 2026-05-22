@@ -186,7 +186,7 @@ func checkQoSState(state State, report *CheckReport) {
 		report.addDetails("qos", "ok", "qos_disabled", "qos disabled", map[string]string{"mode": state.QoSMode})
 		return
 	}
-	if _, err := os.Stat("/usr/local/sbin/storctl-qos.sh"); err != nil {
+	if _, err := os.Stat(hostPath("/usr/local/sbin/storctl-qos.sh")); err != nil {
 		report.addDetails("qos", "warn", "qos_persistence_missing", "storctl-qos.sh missing", map[string]string{"mode": state.QoSMode})
 		return
 	}
@@ -208,7 +208,7 @@ func checkLink(name string, report *CheckReport, runner Runner) {
 	if name == "" {
 		return
 	}
-	if _, err := os.Stat("/sys/class/net/" + name); err != nil {
+	if _, err := os.Stat(hostPath("/sys/class/net/" + name)); err != nil {
 		report.add("link:"+name, "warn", "link_missing", "missing")
 		return
 	}

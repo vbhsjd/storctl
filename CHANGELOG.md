@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.5.3
+
+### Added
+
+- Added `STORCTL_SIM_ROOT` support for high-fidelity local integration tests
+  without touching real `/etc`, `/sys`, `/run`, or `/var` paths.
+- Simulation mode now bypasses root checks and routes shell snippets through a
+  fake shell command, so QoS and installer tests can be run safely on a laptop.
+- Added `STORCTL_SIM_ARCH` for simulated artifact matching on non-aarch64 test
+  hosts.
+
 ## v0.5.2
 
 ### Changed

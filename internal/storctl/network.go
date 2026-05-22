@@ -7,7 +7,7 @@ import (
 )
 
 func ensureNICExists(nic string) error {
-	if _, err := os.Stat("/sys/class/net/" + nic); err != nil {
+	if _, err := os.Stat(hostPath("/sys/class/net/" + nic)); err != nil {
 		return err
 	}
 	return nil

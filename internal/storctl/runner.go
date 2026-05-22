@@ -64,10 +64,20 @@ func (r *OSRunner) Run(name string, args ...string) (string, error) {
 }
 
 func (r *OSRunner) Sh(command string) (string, error) {
+	if simMode() {
+		return r.Run("storctl-sim-sh", command)
+	}
 	return r.Run("/bin/sh", "-c", command)
 }
 
 func (r *OSRunner) Exists(name string) bool {
+	if simMode() {
+		for _, missing := range strings.Split(os.Getenv("STORCTL_SIM_MISSING_COMMANDS"), ",") {
+			if strings.TrimSpace(missing) == name {
+				return false
+			}
+		}
+	}
 	_, err := exec.LookPath(name)
 	return err == nil
 }

@@ -156,7 +156,7 @@ func installDOCAHost(pkg string, r *Reporter, runner Runner) (bool, error) {
 }
 
 func installMLNXOFED(pkg string, r *Reporter, runner Runner) (bool, error) {
-	work := "/tmp/storctl-mlnx"
+	work := hostPath("/tmp/storctl-mlnx")
 	if _, err := runner.Run("rm", "-rf", work); err != nil {
 		return false, err
 	}
@@ -189,7 +189,7 @@ func restartOpenIBD(runner Runner) {
 }
 
 func install1823Artifact(pkg string, upgradeFirmware bool, r *Reporter, runner Runner) (bool, error) {
-	work := "/tmp/storctl-1823"
+	work := hostPath("/tmp/storctl-1823")
 	if _, err := runner.Run("rm", "-rf", work); err != nil {
 		return false, err
 	}

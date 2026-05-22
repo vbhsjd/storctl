@@ -12,6 +12,7 @@ import (
 )
 
 const stateSchemaVersion = 1
+const simRootEnv = "STORCTL_SIM_ROOT"
 
 type State struct {
 	SchemaVersion   int         `json:"schema_version"`
@@ -44,6 +45,9 @@ func requireRoot() error {
 	if runtime.GOOS == "windows" {
 		return nil
 	}
+	if simRoot() != "" {
+		return nil
+	}
 	if os.Geteuid() != 0 {
 		return fmt.Errorf("root is required")
 	}
@@ -51,7 +55,7 @@ func requireRoot() error {
 }
 
 func detectOS() (string, string, error) {
-	data, err := os.ReadFile("/etc/os-release")
+	data, err := os.ReadFile(hostPath("/etc/os-release"))
 	if err != nil {
 		return "", "", err
 	}
@@ -60,7 +64,7 @@ func detectOS() (string, string, error) {
 }
 
 func detectOSInfo() (OSInfo, error) {
-	data, err := os.ReadFile("/etc/os-release")
+	data, err := os.ReadFile(hostPath("/etc/os-release"))
 	if err != nil {
 		return OSInfo{}, err
 	}
@@ -124,11 +128,12 @@ func hasSystemd(r Runner) bool {
 	if !r.Exists("systemctl") {
 		return false
 	}
-	_, err := os.Stat("/run/systemd/system")
+	_, err := os.Stat(hostPath("/run/systemd/system"))
 	return err == nil
 }
 
 func backupIfExists(path string) error {
+	path = hostPath(path)
 	if _, err := os.Stat(path); err != nil {
 		if os.IsNotExist(err) {
 			return nil
@@ -144,6 +149,7 @@ func backupIfExists(path string) error {
 }
 
 func writeFileChanged(path string, data []byte, mode os.FileMode) (bool, error) {
+	path = hostPath(path)
 	if old, err := os.ReadFile(path); err == nil && string(old) == string(data) {
 		return false, nil
 	}
@@ -182,14 +188,15 @@ func saveState(cfg Config, nicType string, rebootRequired, systemd bool, degrade
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(cfg.StateDir, 0755); err != nil {
+	stateDir := hostPath(cfg.StateDir)
+	if err := os.MkdirAll(stateDir, 0755); err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(cfg.StateDir, "state.json"), append(data, '\n'), 0644)
+	return os.WriteFile(filepath.Join(stateDir, "state.json"), append(data, '\n'), 0644)
 }
 
 func loadState(stateDir string) (State, error) {
-	data, err := os.ReadFile(filepath.Join(stateDir, "state.json"))
+	data, err := os.ReadFile(filepath.Join(hostPath(stateDir), "state.json"))
 	if err != nil {
 		return State{}, err
 	}
@@ -198,4 +205,25 @@ func loadState(stateDir string) (State, error) {
 		return State{}, err
 	}
 	return state, nil
+}
+
+func simRoot() string {
+	return strings.TrimRight(strings.TrimSpace(os.Getenv(simRootEnv)), string(os.PathSeparator))
+}
+
+func simMode() bool {
+	return simRoot() != ""
+}
+
+func hostPath(path string) string {
+	root := simRoot()
+	if root == "" || !filepath.IsAbs(path) {
+		return path
+	}
+	cleanRoot := filepath.Clean(root)
+	cleanPath := filepath.Clean(path)
+	if cleanPath == cleanRoot || strings.HasPrefix(cleanPath, cleanRoot+string(os.PathSeparator)) {
+		return cleanPath
+	}
+	return filepath.Join(cleanRoot, strings.TrimPrefix(cleanPath, string(os.PathSeparator)))
 }

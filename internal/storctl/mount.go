@@ -27,7 +27,7 @@ func configureMounts(cfg Config, systemd bool, r *Reporter, runner Runner) (Moun
 	}
 	result := MountResult{}
 	for _, m := range cfg.Mounts {
-		if err := os.MkdirAll(m.MountPoint, 0755); err != nil {
+		if err := os.MkdirAll(hostPath(m.MountPoint), 0755); err != nil {
 			return MountResult{}, err
 		}
 		if systemd {
@@ -72,7 +72,7 @@ func configureMounts(cfg Config, systemd bool, r *Reporter, runner Runner) (Moun
 
 func configureTCPFallbackMounts(cfg Config, systemd bool, r *Reporter, runner Runner, reason string) error {
 	for _, m := range cfg.Mounts {
-		if err := os.MkdirAll(m.MountPoint, 0755); err != nil {
+		if err := os.MkdirAll(hostPath(m.MountPoint), 0755); err != nil {
 			return err
 		}
 		if err := configureTCPFallbackMount(m, systemd, r, runner); err != nil {
@@ -159,7 +159,7 @@ WantedBy=multi-user.target
 func persistFstabMount(m MountSpec, r *Reporter) error {
 	line := fmt.Sprintf("%s:%s %s nfs %s 0 0", m.Server, m.Export, m.MountPoint, m.Options)
 	path := "/etc/fstab"
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(hostPath(path))
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}

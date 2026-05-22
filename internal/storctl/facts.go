@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"strings"
 )
 
@@ -109,6 +110,9 @@ func collectFacts(runner Runner) FactsReport {
 }
 
 func collectInterfaceFacts() []InterfaceFact {
+	if simMode() {
+		return collectSimInterfaceFacts()
+	}
 	ifaces, err := net.Interfaces()
 	if err != nil {
 		return nil
@@ -127,6 +131,52 @@ func collectInterfaceFacts() []InterfaceFact {
 			}
 		}
 		out = append(out, fact)
+	}
+	return out
+}
+
+func collectSimInterfaceFacts() []InterfaceFact {
+	entries, err := os.ReadDir(hostPath("/sys/class/net"))
+	if err != nil {
+		return nil
+	}
+	out := make([]InterfaceFact, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		state, _ := os.ReadFile(hostPath("/sys/class/net/" + name + "/operstate"))
+		fact := InterfaceFact{
+			Name:    name,
+			Up:      strings.TrimSpace(string(state)) == "up",
+			Ignored: isIgnoredInterface(name),
+		}
+		if addrs, err := os.ReadFile(hostPath("/sys/class/net/" + name + "/ipv4_addrs")); err == nil {
+			for _, line := range nonEmptyLines(string(addrs)) {
+				fact.Addrs = append(fact.Addrs, line)
+			}
+		}
+		out = append(out, fact)
+	}
+	return out
+}
+
+func simManagementIPs() []net.IP {
+	var out []net.IP
+	for _, iface := range collectSimInterfaceFacts() {
+		if !iface.Up || iface.Ignored {
+			continue
+		}
+		for _, raw := range iface.Addrs {
+			ip, _, err := net.ParseCIDR(raw)
+			if err != nil {
+				ip = net.ParseIP(raw)
+			}
+			if ip != nil && isManagementCandidate(ip.To4()) {
+				out = append(out, ip.To4())
+			}
+		}
 	}
 	return out
 }
