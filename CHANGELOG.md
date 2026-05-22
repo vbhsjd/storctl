@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.5.2
+
+### Changed
+
+- Artifact selection now understands openEuler SP versions from `VERSION`,
+  `VERSION_ID`, and `PRETTY_NAME`, and chooses the most specific
+  `os_version_prefix` match.
+
 ## v0.5.1
 
 ### Added

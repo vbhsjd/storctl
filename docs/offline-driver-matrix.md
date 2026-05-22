@@ -15,7 +15,7 @@
 ```text
 /root/storage_pkgs/
   storctl-artifacts.json
-  MLNX_OFED_LINUX-5.8-1.1.2.1-openeuler22.03-aarch64.tgz
+  MLNX_OFED_LINUX-5.8-1.1.2.1-openeuler22.03SP4-aarch64.tgz
   SDK_LINUX-17.12.5.0-openEuler24.03SP2-aarch64.tar.gz
 ```
 
@@ -25,7 +25,7 @@
 storctl generate-manifest \
   --artifact-dir /root/storage_pkgs \
   --os-id openEuler \
-  --os-version-prefix 22.03 \
+  --os-version-prefix 24.03-LTS-SP2 \
   --arch aarch64 > /root/storage_pkgs/storctl-artifacts.json
 storctl validate-artifacts --artifact-dir /root/storage_pkgs
 ```
@@ -37,10 +37,10 @@ storctl validate-artifacts --artifact-dir /root/storage_pkgs
   "artifacts": [
     {
       "os_id": "openEuler",
-      "os_version_prefix": "22.03",
+      "os_version_prefix": "22.03-LTS-SP4",
       "arch": "aarch64",
       "nic_type": "cx7",
-      "file": "MLNX_OFED_LINUX-5.8-1.1.2.1-openeuler22.03-aarch64.tgz",
+      "file": "MLNX_OFED_LINUX-5.8-1.1.2.1-openeuler22.03SP4-aarch64.tgz",
       "sha256": "replace-with-sha256",
       "requires_repo": false
     }
@@ -49,7 +49,7 @@ storctl validate-artifacts --artifact-dir /root/storage_pkgs
 ```
 
 - `os_id` 来自 `/etc/os-release` 的 `ID`。
-- `os_version_prefix` 是前缀匹配，比如 `22.03` 可匹配 `22.03-LTS-SP4`。
+- `os_version_prefix` 是前缀匹配，推荐写到 SP 级别，比如 `22.03-LTS-SP4`。如果确实多个 SP 共用一个包，也可以写较宽的 `22.03` 作为兜底。
 - `arch` 在 Linux aarch64 机器上应写 `aarch64`。
 - `nic_type` 当前支持 `cx7` 和 `1823`。
 - `requires_repo` 为 `true` 表示安装时可能调用 dnf repo，默认会被拒绝，除非显式传 `--allow-repo`。
@@ -58,12 +58,12 @@ storctl validate-artifacts --artifact-dir /root/storage_pkgs
 
 | OS | Arch | NIC | Artifact | Repo required | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| openEuler 22.03 | aarch64 | CX7 | `MLNX_OFED_LINUX-*.tgz` 或 `IB_NIC-*.tgz` | 否 | 推荐 |
-| openEuler 22.03 | aarch64 | 1823 | `nic_1823*.tar.gz` 或 `hinic*.tar.gz` | 否 | 推荐 |
+| openEuler 22.03-LTS-SP4 | aarch64 | CX7 | `MLNX_OFED_LINUX-*.tgz` 或 `IB_NIC-*.tgz` | 否 | 推荐写到 SP 级别 |
+| openEuler 22.03-LTS-SP4 | aarch64 | 1823 | `SDK_LINUX-*.tar.gz` | 否 | 推荐写到 SP 级别 |
 | openEuler 23.x | aarch64 | CX7 | 待填 | 否 | 待验证 |
 | openEuler 23.x | aarch64 | 1823 | 待填 | 否 | 待验证 |
-| openEuler 24.03 | aarch64 | CX7 | `doca-host*.rpm` 或对应 MLNX/IB 离线包 | 视包而定 | 推荐优先找真离线包 |
-| openEuler 24.03 | aarch64 | 1823 | 待填 | 否 | 待验证 |
+| openEuler 24.03-LTS-SP2 | aarch64 | CX7 | `doca-host*.rpm` 或对应 MLNX/IB 离线包 | 视包而定 | 推荐优先找真离线包 |
+| openEuler 24.03-LTS-SP2 | aarch64 | 1823 | `SDK_LINUX-*.tar.gz` | 否 | 待验证 |
 
 ## 批量接入流程
 

@@ -303,8 +303,8 @@ The directory must include a manifest:
 ```text
 /root/storage_pkgs/
   storctl-artifacts.json
-  MLNX_OFED_LINUX-5.8-1.1.2.1-openeuler22.03-aarch64.tgz
-  nic_1823-openeuler22.03-aarch64.tar.gz
+  MLNX_OFED_LINUX-5.8-1.1.2.1-openeuler22.03SP4-aarch64.tgz
+  SDK_LINUX-17.12.5.0-openEuler22.03SP4-aarch64.tar.gz
 ```
 
 Example `storctl-artifacts.json`:
@@ -314,19 +314,19 @@ Example `storctl-artifacts.json`:
   "artifacts": [
     {
       "os_id": "openEuler",
-      "os_version_prefix": "22.03",
+      "os_version_prefix": "22.03-LTS-SP4",
       "arch": "aarch64",
       "nic_type": "cx7",
-      "file": "MLNX_OFED_LINUX-5.8-1.1.2.1-openeuler22.03-aarch64.tgz",
+      "file": "MLNX_OFED_LINUX-5.8-1.1.2.1-openeuler22.03SP4-aarch64.tgz",
       "sha256": "replace-with-sha256",
       "requires_repo": false
     },
     {
       "os_id": "openEuler",
-      "os_version_prefix": "22.03",
+      "os_version_prefix": "22.03-LTS-SP4",
       "arch": "aarch64",
       "nic_type": "1823",
-      "file": "nic_1823-openeuler22.03-aarch64.tar.gz",
+      "file": "SDK_LINUX-17.12.5.0-openEuler22.03SP4-aarch64.tar.gz",
       "sha256": "replace-with-sha256",
       "requires_repo": false
     }
@@ -343,7 +343,7 @@ not modify files:
 storctl generate-manifest \
   --artifact-dir /root/storage_pkgs \
   --os-id openEuler \
-  --os-version-prefix 22.03 \
+  --os-version-prefix 22.03-LTS-SP4 \
   --arch aarch64 > /root/storage_pkgs/storctl-artifacts.json
 ```
 
@@ -359,7 +359,7 @@ storctl validate-artifacts --artifact-dir /root/storage_pkgs
 problems together.
 
 - CX7 prefers true offline `MLNX_OFED_LINUX-*.tgz` or `IB_NIC-*.tgz` bundles.
-- 1823 supports `nic_1823.tar.gz` or `hinic*.tar.gz`.
+- 1823 supports `SDK_LINUX-*.tar.gz`, `nic_1823.tar.gz`, or `hinic*.tar.gz`.
 - Firmware upgrade is disabled unless `--upgrade-firmware` is set.
 - `doca-host*.rpm` is a repo installer. It is allowed only when the manifest
   sets `"requires_repo": true` and the command includes `--allow-repo`:
@@ -373,9 +373,9 @@ checks the manifest:
 
 | OS | Arch | CX7 artifact | 1823 artifact | Notes |
 | --- | --- | --- | --- | --- |
-| openEuler 22.03 | aarch64 | `MLNX_OFED_LINUX-*.tgz` | `nic_1823*.tar.gz` | Main path |
+| openEuler 22.03-LTS-SP4 | aarch64 | `MLNX_OFED_LINUX-*.tgz` | `SDK_LINUX-*.tar.gz` | Prefer SP-specific entries |
 | openEuler 23.x | aarch64 | To verify | To verify | Add an explicit manifest row |
-| openEuler 24.03 | aarch64 | Matching DOCA/MLNX package | To verify | Prefer true offline bundles |
+| openEuler 24.03-LTS-SP2 | aarch64 | Matching DOCA/MLNX package | `SDK_LINUX-*.tar.gz` | Prefer true offline bundles |
 
 If DOCA Host is required, prepare an internal dnf repo first. `storctl` does
 not maintain cross-lab repositories.

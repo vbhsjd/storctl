@@ -35,37 +35,114 @@ func selectArtifact(dir, nicType string) (Artifact, error) {
 	if err != nil {
 		return Artifact{}, err
 	}
-	osID, osVersion, err := detectOS()
+	osInfo, err := detectOSInfo()
 	if err != nil {
 		return Artifact{}, err
 	}
 	arch := artifactArch()
-	return selectArtifactFromManifest(manifest, dir, osID, osVersion, arch, nicType)
+	return selectArtifactFromManifestForOS(manifest, dir, osInfo, arch, nicType)
 }
 
 func selectArtifactFromManifest(manifest ArtifactManifest, dir, osID, osVersion, arch, nicType string) (Artifact, error) {
+	info := OSInfo{
+		ID:                osID,
+		VersionID:         osVersion,
+		Version:           osVersion,
+		PrettyName:        osVersion,
+		NormalizedVersion: normalizeOSVersion(osVersion),
+	}
+	return selectArtifactFromManifestForOS(manifest, dir, info, arch, nicType)
+}
+
+func selectArtifactFromManifestForOS(manifest ArtifactManifest, dir string, osInfo OSInfo, arch, nicType string) (Artifact, error) {
+	matches := []Artifact{}
+	bestScore := -1
 	for _, artifact := range manifest.Artifacts {
 		if !strings.EqualFold(artifact.NICType, nicType) {
 			continue
 		}
-		if !strings.EqualFold(artifact.OSID, osID) {
+		if !strings.EqualFold(artifact.OSID, osInfo.ID) {
 			continue
 		}
-		if artifact.OSVersionPrefix != "" && !strings.HasPrefix(osVersion, artifact.OSVersionPrefix) {
+		score, ok := matchOSVersionPrefix(artifact.OSVersionPrefix, osInfo)
+		if !ok {
 			continue
 		}
 		if !strings.EqualFold(artifact.Arch, arch) {
 			continue
 		}
+		if score > bestScore {
+			bestScore = score
+			matches = []Artifact{artifact}
+			continue
+		}
+		if score == bestScore {
+			matches = append(matches, artifact)
+		}
+	}
+	if len(matches) == 0 {
+		return Artifact{}, fmt.Errorf("no artifact matches os=%s version=%s arch=%s nic_type=%s", osInfo.ID, displayOSVersion(osInfo), arch, nicType)
+	}
+	file := matches[0].File
+	for _, artifact := range matches {
 		if artifact.File == "" {
 			return Artifact{}, fmt.Errorf("matched artifact has empty file")
 		}
-		if _, err := os.Stat(filepath.Join(dir, artifact.File)); err != nil {
-			return Artifact{}, fmt.Errorf("matched artifact file missing: %s", filepath.Join(dir, artifact.File))
+		if artifact.File != file {
+			return Artifact{}, fmt.Errorf("ambiguous artifacts match os=%s version=%s arch=%s nic_type=%s with same specificity: %s, %s", osInfo.ID, displayOSVersion(osInfo), arch, nicType, file, artifact.File)
 		}
-		return artifact, nil
 	}
-	return Artifact{}, fmt.Errorf("no artifact matches os=%s version=%s arch=%s nic_type=%s", osID, osVersion, arch, nicType)
+	if _, err := os.Stat(filepath.Join(dir, file)); err != nil {
+		return Artifact{}, fmt.Errorf("matched artifact file missing: %s", filepath.Join(dir, file))
+	}
+	return matches[0], nil
+}
+
+func matchOSVersionPrefix(prefix string, osInfo OSInfo) (int, bool) {
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" {
+		return 0, true
+	}
+	lowPrefix := strings.ToLower(prefix)
+	normalizedPrefix := normalizeOSVersion(prefix)
+	for _, candidate := range osVersionCandidates(osInfo) {
+		lowCandidate := strings.ToLower(candidate)
+		if strings.HasPrefix(lowCandidate, lowPrefix) {
+			return len(lowPrefix), true
+		}
+		if normalizedPrefix != "" && strings.HasPrefix(lowCandidate, normalizedPrefix) {
+			return len(normalizedPrefix), true
+		}
+	}
+	return 0, false
+}
+
+func osVersionCandidates(osInfo OSInfo) []string {
+	seen := map[string]bool{}
+	out := []string{}
+	for _, candidate := range []string{osInfo.VersionID, osInfo.Version, osInfo.PrettyName, osInfo.NormalizedVersion} {
+		if normalized := normalizeOSVersion(candidate); normalized != "" {
+			candidate = strings.TrimSpace(candidate) + "\n" + normalized
+		}
+		for _, part := range strings.Split(candidate, "\n") {
+			part = strings.TrimSpace(part)
+			if part == "" || seen[strings.ToLower(part)] {
+				continue
+			}
+			seen[strings.ToLower(part)] = true
+			out = append(out, part)
+		}
+	}
+	return out
+}
+
+func displayOSVersion(osInfo OSInfo) string {
+	for _, value := range []string{osInfo.Version, osInfo.PrettyName, osInfo.VersionID, osInfo.NormalizedVersion} {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return "unknown"
 }
 
 func readArtifactManifest(path string) (ArtifactManifest, error) {

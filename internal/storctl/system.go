@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -31,6 +32,14 @@ type State struct {
 	DegradedReason  string      `json:"degraded_reason,omitempty"`
 }
 
+type OSInfo struct {
+	ID                string
+	VersionID         string
+	Version           string
+	PrettyName        string
+	NormalizedVersion string
+}
+
 func requireRoot() error {
 	if runtime.GOOS == "windows" {
 		return nil
@@ -46,6 +55,19 @@ func detectOS() (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
+	info := parseOSRelease(data)
+	return info.ID, info.VersionID, nil
+}
+
+func detectOSInfo() (OSInfo, error) {
+	data, err := os.ReadFile("/etc/os-release")
+	if err != nil {
+		return OSInfo{}, err
+	}
+	return parseOSRelease(data), nil
+}
+
+func parseOSRelease(data []byte) OSInfo {
 	values := map[string]string{}
 	for _, line := range strings.Split(string(data), "\n") {
 		key, value, ok := strings.Cut(line, "=")
@@ -54,7 +76,40 @@ func detectOS() (string, string, error) {
 		}
 		values[key] = strings.Trim(value, `"`)
 	}
-	return values["ID"], values["VERSION_ID"], nil
+	info := OSInfo{
+		ID:         values["ID"],
+		VersionID:  values["VERSION_ID"],
+		Version:    values["VERSION"],
+		PrettyName: values["PRETTY_NAME"],
+	}
+	for _, candidate := range []string{info.VersionID, info.Version, info.PrettyName} {
+		if normalized := normalizeOSVersion(candidate); normalized != "" {
+			if len(normalized) > len(info.NormalizedVersion) {
+				info.NormalizedVersion = normalized
+			}
+		}
+	}
+	return info
+}
+
+var osVersionBaseRE = regexp.MustCompile(`(?i)([0-9]{2}\.[0-9]{2})`)
+var osVersionSPRE = regexp.MustCompile(`(?i)(?:lts[-_ .]*)?sp[-_ .]*([0-9]+)`)
+
+func normalizeOSVersion(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	baseMatch := osVersionBaseRE.FindStringSubmatch(raw)
+	if len(baseMatch) < 2 {
+		return ""
+	}
+	base := strings.ToLower(baseMatch[1])
+	spMatch := osVersionSPRE.FindStringSubmatch(raw)
+	if len(spMatch) >= 2 {
+		return fmt.Sprintf("%s-lts-sp%s", base, spMatch[1])
+	}
+	return base
 }
 
 func supportedOpenEuler(version string) bool {

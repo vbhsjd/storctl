@@ -275,8 +275,8 @@ GOOS=linux GOARCH=arm64 go build -o storctl-linux-arm64 ./cmd/storctl
 ```text
 /root/storage_pkgs/
   storctl-artifacts.json
-  MLNX_OFED_LINUX-5.8-1.1.2.1-openeuler22.03-aarch64.tgz
-  nic_1823-openeuler22.03-aarch64.tar.gz
+  MLNX_OFED_LINUX-5.8-1.1.2.1-openeuler22.03SP4-aarch64.tgz
+  SDK_LINUX-17.12.5.0-openEuler22.03SP4-aarch64.tar.gz
 ```
 
 `storctl-artifacts.json` 示例：
@@ -286,19 +286,19 @@ GOOS=linux GOARCH=arm64 go build -o storctl-linux-arm64 ./cmd/storctl
   "artifacts": [
     {
       "os_id": "openEuler",
-      "os_version_prefix": "22.03",
+      "os_version_prefix": "22.03-LTS-SP4",
       "arch": "aarch64",
       "nic_type": "cx7",
-      "file": "MLNX_OFED_LINUX-5.8-1.1.2.1-openeuler22.03-aarch64.tgz",
+      "file": "MLNX_OFED_LINUX-5.8-1.1.2.1-openeuler22.03SP4-aarch64.tgz",
       "sha256": "replace-with-sha256",
       "requires_repo": false
     },
     {
       "os_id": "openEuler",
-      "os_version_prefix": "22.03",
+      "os_version_prefix": "22.03-LTS-SP4",
       "arch": "aarch64",
       "nic_type": "1823",
-      "file": "nic_1823-openeuler22.03-aarch64.tar.gz",
+      "file": "SDK_LINUX-17.12.5.0-openEuler22.03SP4-aarch64.tar.gz",
       "sha256": "replace-with-sha256",
       "requires_repo": false
     }
@@ -314,7 +314,7 @@ GOOS=linux GOARCH=arm64 go build -o storctl-linux-arm64 ./cmd/storctl
 storctl generate-manifest \
   --artifact-dir /root/storage_pkgs \
   --os-id openEuler \
-  --os-version-prefix 22.03 \
+  --os-version-prefix 22.03-LTS-SP4 \
   --arch aarch64 > /root/storage_pkgs/storctl-artifacts.json
 ```
 
@@ -340,9 +340,9 @@ storctl install-driver --nic-type cx7 --artifact-dir /root/storage_pkgs --allow-
 
 | OS | Arch | CX7 artifact | 1823 artifact | 备注 |
 | --- | --- | --- | --- | --- |
-| openEuler 22.03 | aarch64 | `MLNX_OFED_LINUX-*.tgz` | `nic_1823*.tar.gz` | 当前主力路径 |
+| openEuler 22.03-LTS-SP4 | aarch64 | `MLNX_OFED_LINUX-*.tgz` | `SDK_LINUX-*.tar.gz` | 推荐写到 SP 级别 |
 | openEuler 23.x | aarch64 | 待验证 | 待验证 | manifest 中单独配置 |
-| openEuler 24.03 | aarch64 | DOCA/MLNX 对应包 | 待验证 | 尽量选择真离线包 |
+| openEuler 24.03-LTS-SP2 | aarch64 | DOCA/MLNX 对应包 | `SDK_LINUX-*.tar.gz` | 尽量选择真离线包 |
 
 如果必须使用 DOCA Host，请先在实验室内准备可用的 dnf repo。`storctl` 不负责维护跨实验室仓库。
 

@@ -32,6 +32,78 @@ func TestArtifactManifestSelectsMatchingArtifact(t *testing.T) {
 	}
 }
 
+func TestArtifactManifestSelectsMostSpecificSPMatch(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"generic.tgz", "sp4.tgz"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("driver"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	manifest := ArtifactManifest{Artifacts: []Artifact{
+		{OSID: "openEuler", OSVersionPrefix: "22.03", Arch: "aarch64", NICType: "1823", File: "generic.tgz"},
+		{OSID: "openEuler", OSVersionPrefix: "22.03-LTS-SP4", Arch: "aarch64", NICType: "1823", File: "sp4.tgz"},
+	}}
+	got, err := selectArtifactFromManifestForOS(manifest, dir, OSInfo{
+		ID:                "openEuler",
+		VersionID:         "22.03",
+		Version:           "22.03 (LTS-SP4)",
+		PrettyName:        "openEuler 22.03 (LTS-SP4)",
+		NormalizedVersion: "22.03-lts-sp4",
+	}, "aarch64", "1823")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.File != "sp4.tgz" {
+		t.Fatalf("File = %q, want sp4.tgz", got.File)
+	}
+}
+
+func TestArtifactManifestFallsBackToBroadVersionPrefix(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "generic.tgz"), []byte("driver"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	manifest := ArtifactManifest{Artifacts: []Artifact{
+		{OSID: "openEuler", OSVersionPrefix: "22.03", Arch: "aarch64", NICType: "1823", File: "generic.tgz"},
+	}}
+	got, err := selectArtifactFromManifestForOS(manifest, dir, OSInfo{
+		ID:                "openEuler",
+		VersionID:         "22.03",
+		Version:           "22.03 (LTS-SP4)",
+		PrettyName:        "openEuler 22.03 (LTS-SP4)",
+		NormalizedVersion: "22.03-lts-sp4",
+	}, "aarch64", "1823")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.File != "generic.tgz" {
+		t.Fatalf("File = %q, want generic.tgz", got.File)
+	}
+}
+
+func TestArtifactManifestReportsAmbiguousSameSpecificity(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"a.tgz", "b.tgz"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("driver"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	manifest := ArtifactManifest{Artifacts: []Artifact{
+		{OSID: "openEuler", OSVersionPrefix: "22.03-LTS-SP4", Arch: "aarch64", NICType: "1823", File: "a.tgz"},
+		{OSID: "openEuler", OSVersionPrefix: "22.03-lts-sp4", Arch: "aarch64", NICType: "1823", File: "b.tgz"},
+	}}
+	_, err := selectArtifactFromManifestForOS(manifest, dir, OSInfo{
+		ID:                "openEuler",
+		VersionID:         "22.03",
+		Version:           "22.03 (LTS-SP4)",
+		PrettyName:        "openEuler 22.03 (LTS-SP4)",
+		NormalizedVersion: "22.03-lts-sp4",
+	}, "aarch64", "1823")
+	if err == nil || !strings.Contains(err.Error(), "ambiguous artifacts") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestArtifactManifestReportsNoMatch(t *testing.T) {
 	manifest := ArtifactManifest{Artifacts: []Artifact{{
 		OSID:            "openEuler",

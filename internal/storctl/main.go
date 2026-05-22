@@ -163,5 +163,8 @@ example:
     --mount 172.27.0.51:/export/b:/mnt/b
 
   storctl plan --profile c4 --nic enp23s0f1 --mgmt-ip 80.5.17.113
+
+  storctl generate-manifest --artifact-dir /root/storage_pkgs \
+    --os-id openEuler --os-version-prefix 22.03-LTS-SP4 --arch aarch64
 `)
 }

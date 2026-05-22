@@ -52,3 +52,30 @@ func TestLoadLegacyStateWithoutSchemaVersion(t *testing.T) {
 		t.Fatalf("legacy state not loaded: %+v", state)
 	}
 }
+
+func TestNormalizeOpenEulerVersions(t *testing.T) {
+	cases := map[string]string{
+		"22.03":                         "22.03",
+		"22.03-LTS-SP4":                 "22.03-lts-sp4",
+		"22.03 (LTS-SP4)":               "22.03-lts-sp4",
+		"openEuler 22.03 (LTS-SP4)":     "22.03-lts-sp4",
+		"VERSION_ID=24.03-LTS-SP2":      "24.03-lts-sp2",
+		"SDK openEuler22.03SP4 aarch64": "22.03-lts-sp4",
+	}
+	for input, want := range cases {
+		if got := normalizeOSVersion(input); got != want {
+			t.Fatalf("normalizeOSVersion(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
+func TestParseOSReleaseKeepsSPDetails(t *testing.T) {
+	info := parseOSRelease([]byte(`ID=openEuler
+VERSION_ID="22.03"
+VERSION="22.03 (LTS-SP4)"
+PRETTY_NAME="openEuler 22.03 (LTS-SP4)"
+`))
+	if info.ID != "openEuler" || info.VersionID != "22.03" || info.NormalizedVersion != "22.03-lts-sp4" {
+		t.Fatalf("unexpected OS info: %+v", info)
+	}
+}

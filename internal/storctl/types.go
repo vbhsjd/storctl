@@ -334,7 +334,7 @@ func parseGenerateManifest(args []string) (ManifestGenerateConfig, error) {
 	fs := flag.NewFlagSet("generate-manifest", flag.ContinueOnError)
 	fs.StringVar(&cfg.ArtifactDir, "artifact-dir", cfg.ArtifactDir, "local artifact directory")
 	fs.StringVar(&cfg.OSID, "os-id", "", "OS ID, for example openEuler")
-	fs.StringVar(&cfg.OSVersionPrefix, "os-version-prefix", "", "OS version prefix, for example 22.03")
+	fs.StringVar(&cfg.OSVersionPrefix, "os-version-prefix", "", "OS version prefix, for example 22.03-LTS-SP4")
 	fs.StringVar(&cfg.Arch, "arch", cfg.Arch, "architecture, for example aarch64")
 	if err := fs.Parse(args); err != nil {
 		return ManifestGenerateConfig{}, err

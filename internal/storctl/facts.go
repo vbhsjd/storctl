@@ -20,9 +20,13 @@ type FactsReport struct {
 }
 
 type OSFacts struct {
-	ID      string `json:"id"`
-	Version string `json:"version"`
-	Arch    string `json:"arch"`
+	ID                string `json:"id"`
+	Version           string `json:"version"`
+	VersionID         string `json:"version_id,omitempty"`
+	VersionText       string `json:"version_text,omitempty"`
+	PrettyName        string `json:"pretty_name,omitempty"`
+	NormalizedVersion string `json:"normalized_version,omitempty"`
+	Arch              string `json:"arch"`
 }
 
 type InterfaceFact struct {
@@ -66,13 +70,21 @@ func Facts(jsonOut bool, out io.Writer, runner Runner) error {
 }
 
 func collectFacts(runner Runner) FactsReport {
-	osID, osVersion, _ := detectOS()
+	osInfo, _ := detectOSInfo()
 	mgmtIPs, _ := candidateManagementIPs()
 	report := FactsReport{
 		SchemaVersion: 1,
-		OS:            OSFacts{ID: osID, Version: osVersion, Arch: artifactArch()},
-		Systemd:       hasSystemd(runner),
-		Commands:      map[string]bool{},
+		OS: OSFacts{
+			ID:                osInfo.ID,
+			Version:           osInfo.VersionID,
+			VersionID:         osInfo.VersionID,
+			VersionText:       osInfo.Version,
+			PrettyName:        osInfo.PrettyName,
+			NormalizedVersion: osInfo.NormalizedVersion,
+			Arch:              artifactArch(),
+		},
+		Systemd:  hasSystemd(runner),
+		Commands: map[string]bool{},
 	}
 	for _, cmd := range []string{"nmcli", "rdma", "ibdev2netdev", "mlnx_qos", "cma_roce_tos", "hinicadm3", "findmnt", "nfsstat", "systemctl"} {
 		report.Commands[cmd] = runner.Exists(cmd)
