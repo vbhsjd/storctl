@@ -97,9 +97,11 @@ func TestTCPFallbackOptionsUseTCP(t *testing.T) {
 }
 
 type fakeRunner struct {
-	exists  map[string]bool
-	outputs map[string]string
-	calls   []string
+	exists   map[string]bool
+	outputs  map[string]string
+	errors   map[string]error
+	failOnce map[string]bool
+	calls    []string
 }
 
 func (f *fakeRunner) Run(name string, args ...string) (string, error) {
@@ -108,6 +110,13 @@ func (f *fakeRunner) Run(name string, args ...string) (string, error) {
 		key += " " + arg
 	}
 	f.calls = append(f.calls, key)
+	if err, ok := f.errors[key]; ok {
+		if f.failOnce[key] {
+			delete(f.errors, key)
+			delete(f.failOnce, key)
+		}
+		return "", err
+	}
 	if out, ok := f.outputs[key]; ok {
 		return out, nil
 	}

@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.5.4
+
+### Changed
+
+- NetworkManager VLAN setup now repairs stale VLAN links whose parent NIC has
+  drifted, for example `data0.3001@eth4` when the selected storage NIC is
+  `eth3`.
+- `apply` now sets the parent NIC MTU before the VLAN MTU and rebuilds the VLAN
+  link once if the existing link rejects the MTU.
+- 1823 SDK installation defaults to driver RPM installation and only runs the
+  vendor `install.sh roce` firmware-capable path when `--upgrade-firmware` is
+  explicit.
+
 ## v0.5.3
 
 ### Added

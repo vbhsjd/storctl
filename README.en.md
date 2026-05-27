@@ -359,7 +359,7 @@ storctl validate-artifacts --artifact-dir /root/storage_pkgs
 problems together.
 
 - CX7 prefers true offline `MLNX_OFED_LINUX-*.tgz` or `IB_NIC-*.tgz` bundles.
-- 1823 supports `SDK_LINUX-*.tar.gz`, `nic_1823.tar.gz`, or `hinic*.tar.gz`.
+- 1823 supports `SDK_LINUX-*.tar.gz`, `nic_1823.tar.gz`, or non-source `hinic*.tar.gz`; source bundles such as `Hinic3 Source*.tar.gz` are ignored. By default storctl extracts the SDK and installs RPMs under `nic/`, `roce/`, and `tool/` without triggering the vendor script's firmware-upgrade tail. It runs `bash install.sh roce` only when `--upgrade-firmware` is explicitly set.
 - Firmware upgrade is disabled unless `--upgrade-firmware` is set.
 - `doca-host*.rpm` is a repo installer. It is allowed only when the manifest
   sets `"requires_repo": true` and the command includes `--allow-repo`:

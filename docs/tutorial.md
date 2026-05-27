@@ -162,6 +162,12 @@ storctl validate-artifacts --artifact-dir /root/storage_pkgs
 storctl install-driver --nic-type 1823 --artifact-dir /root/storage_pkgs
 ```
 
+1823 默认只安装 SDK 包里的驱动 RPM，不升级固件。需要连固件一起升级时，必须显式传：
+
+```bash
+storctl install-driver --nic-type 1823 --artifact-dir /root/storage_pkgs --upgrade-firmware
+```
+
 CX7 同理：
 
 ```bash

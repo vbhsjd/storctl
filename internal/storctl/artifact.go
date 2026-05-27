@@ -250,6 +250,10 @@ func GenerateManifest(cfg ManifestGenerateConfig, out io.Writer, errw io.Writer)
 
 func classifyArtifact(name string) (nicType string, requiresRepo bool, ok bool) {
 	low := strings.ToLower(name)
+	canonical := strings.NewReplacer(" ", "_", "-", "_").Replace(low)
+	if strings.Contains(canonical, "source") || strings.Contains(canonical, "_src") || strings.Contains(canonical, "src_") {
+		return "", false, false
+	}
 	switch {
 	case strings.HasPrefix(low, "doca-host") && strings.HasSuffix(low, ".rpm"):
 		return "cx7", true, true
@@ -257,7 +261,7 @@ func classifyArtifact(name string) (nicType string, requiresRepo bool, ok bool) 
 		if strings.HasSuffix(low, ".tgz") || strings.HasSuffix(low, ".tar.gz") {
 			return "cx7", false, true
 		}
-	case strings.HasPrefix(low, "nic_1823") || strings.HasPrefix(low, "hinic") || strings.HasPrefix(low, "sdk_linux-"):
+	case strings.HasPrefix(canonical, "nic_1823") || strings.HasPrefix(canonical, "hinic") || strings.HasPrefix(canonical, "sdk_linux"):
 		if strings.HasSuffix(low, ".tgz") || strings.HasSuffix(low, ".tar.gz") {
 			return "1823", false, true
 		}

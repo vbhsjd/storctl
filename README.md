@@ -328,7 +328,7 @@ storctl validate-artifacts --artifact-dir /root/storage_pkgs
 `validate-profile` 会拒绝未知字段，适合在多人维护 profile 时提前发现拼写错误。`validate-artifacts` 会一次性列出缺失文件、错误网卡类型和 sha256 不匹配等问题。
 
 - CX7 优先使用真离线的 `MLNX_OFED_LINUX-*.tgz` 或 `IB_NIC-*.tgz`。
-- 1823 支持 `SDK_LINUX-*.tar.gz`、`nic_1823.tar.gz` 或 `hinic*.tar.gz`。安装时会解压 SDK 包，进入 `install.sh` 所在目录执行 `bash install.sh roce`，完成后通常需要重启让驱动/固件生效。
+- 1823 支持 `SDK_LINUX-*.tar.gz`、`nic_1823.tar.gz` 或非源码类 `hinic*.tar.gz`；`Hinic3 Source*.tar.gz` 这类源码包会被忽略。默认安装只解压 SDK 并安装 `nic/`、`roce/`、`tool/` 下的 RPM，不触发厂商脚本尾部的固件升级；显式传 `--upgrade-firmware` 时才执行 `bash install.sh roce`。
 - 默认不升级固件，除非显式传 `--upgrade-firmware`。
 - `doca-host*.rpm` 属于 repo installer。只有 manifest 标记 `"requires_repo": true`，且命令显式传 `--allow-repo` 时才允许：
 

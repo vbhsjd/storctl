@@ -199,15 +199,16 @@ func install1823Artifact(pkg string, upgradeFirmware bool, r *Reporter, runner R
 	if _, err := runner.Run("tar", "xf", pkg, "-C", work); err != nil {
 		return false, err
 	}
-	cmd := fmt.Sprintf("install_sh=$(find %s -maxdepth 3 -type f -name install.sh -print -quit); [ -n \"$install_sh\" ] || { echo 'install.sh not found'; exit 1; }; cd \"$(dirname \"$install_sh\")\" && bash install.sh roce", work)
-	if _, err := runner.Sh(cmd); err != nil {
-		return false, err
-	}
 	if upgradeFirmware {
-		if err := upgrade1823Firmware(runner); err != nil {
-			return true, err
+		if _, err := runner.Sh(fmt.Sprintf("install_sh=$(find %s -maxdepth 3 -type f -name install.sh -print -quit); [ -n \"$install_sh\" ] || { echo 'install.sh not found'; exit 1; }; cd \"$(dirname \"$install_sh\")\" && bash install.sh roce", work)); err != nil {
+			return false, err
 		}
 		r.OK("firmware 1823 upgraded")
+	} else {
+		cmd := fmt.Sprintf("install_sh=$(find %s -maxdepth 3 -type f -name install.sh -print -quit); [ -n \"$install_sh\" ] || { echo 'install.sh not found'; exit 1; }; dir=$(dirname \"$install_sh\"); cd \"$dir\" && if ! rpm -qa | grep -q rdma; then echo 'rdma-core not installed'; exit 1; fi && tool_rpm=$(ls tool/hinicadm3-*.rpm 2>/dev/null | head -n1 || true) && if [ -n \"$tool_rpm\" ]; then rpm -Uvh --force nic/*hisdk3*.rpm nic/*hinic3*.rpm roce/*hiroce3*.rpm \"$tool_rpm\"; else rpm -Uvh --force nic/*hisdk3*.rpm nic/*hinic3*.rpm roce/*hiroce3*.rpm && install -m 0755 tool/hinicadm3 /usr/bin/hinicadm3; fi && if command -v dracut >/dev/null 2>&1; then dracut -f; fi", work)
+		if _, err := runner.Sh(cmd); err != nil {
+			return false, err
+		}
 	}
 	r.OK("driver hinic installed")
 	return true, nil
