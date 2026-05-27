@@ -91,7 +91,7 @@ func TestConfigureMountsDoesNotFallbackToTCPByDefault(t *testing.T) {
 
 func TestTCPFallbackOptionsUseTCP(t *testing.T) {
 	got := tcpFallbackOptions(defaultNFSOptions)
-	if !strings.Contains(got, "proto=tcp") || strings.Contains(got, "proto=rdma") {
+	if !containsAll(got, "vers=3", "proto=tcp", "nolock", "nconnect=8") || strings.Contains(got, "proto=rdma") {
 		t.Fatalf("unexpected tcp options: %s", got)
 	}
 }

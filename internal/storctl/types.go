@@ -13,7 +13,7 @@ const (
 	defaultMTU        = 5500
 	defaultRouteTable = 5000
 	defaultNFSOptions = "vers=4.1,proto=rdma,port=20049,rsize=1048576,wsize=1048576,hard,noatime"
-	defaultTCPOptions = "vers=4.1,proto=tcp,rsize=1048576,wsize=1048576,hard,noatime"
+	defaultTCPOptions = "vers=3,proto=tcp,nolock,nconnect=8,hard,noatime"
 )
 
 type Config struct {

@@ -9,6 +9,9 @@
   `eth3`.
 - `apply` now sets the parent NIC MTU before the VLAN MTU and rebuilds the VLAN
   link once if the existing link rejects the MTU.
+- TCP fallback now defaults to NFSv3 TCP options
+  `vers=3,proto=tcp,nolock,nconnect=8,hard,noatime`, matching lab storage
+  servers that reject NFSv4.1 TCP.
 - 1823 SDK installation defaults to driver RPM installation and only runs the
   vendor `install.sh roce` firmware-capable path when `--upgrade-firmware` is
   explicit.
