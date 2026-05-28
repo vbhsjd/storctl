@@ -2,6 +2,7 @@ package storctl
 
 import (
 	"fmt"
+	"strings"
 )
 
 func Apply(cfg Config, r *Reporter, runner Runner) error {
@@ -22,6 +23,10 @@ func Apply(cfg Config, r *Reporter, runner Runner) error {
 
 	if err := requireCommand(runner, "nmcli"); err != nil {
 		r.Fail("networkmanager", err.Error(), "install/enable NetworkManager and retry")
+		return err
+	}
+	if err := ensureNetworkManagerStarted(runner, r); err != nil {
+		r.Fail("networkmanager", err.Error(), "start NetworkManager and retry")
 		return err
 	}
 	if err := ensureNICExists(cfg.NIC); err != nil {
@@ -59,7 +64,7 @@ func Apply(cfg Config, r *Reporter, runner Runner) error {
 	}
 
 	systemd := hasSystemd(runner)
-	mountResult, err := configureMounts(cfg, systemd, r, runner)
+	mountResult, err := configureMounts(cfg, false, r, runner)
 	if err != nil {
 		r.Fail("rdma mount", err.Error(), "check server port 20049 and run: rdma link")
 		return err
@@ -74,6 +79,42 @@ func Apply(cfg Config, r *Reporter, runner Runner) error {
 		r.Warn("degraded tcp-fallback: %s", mountResult.DegradedReason)
 	}
 	return nil
+}
+
+func ensureNetworkManagerStarted(runner Runner, r *Reporter) error {
+	if networkManagerRunning(runner) {
+		r.OK("networkmanager running")
+		return nil
+	}
+	r.Warn("networkmanager not running, trying to start")
+	var lastErr error
+	if runner.Exists("systemctl") {
+		if _, err := runner.Run("systemctl", "start", "NetworkManager"); err != nil {
+			lastErr = err
+		}
+		if networkManagerRunning(runner) {
+			r.OK("networkmanager started")
+			return nil
+		}
+	}
+	if runner.Exists("service") {
+		if _, err := runner.Run("service", "NetworkManager", "start"); err != nil {
+			lastErr = err
+		}
+		if networkManagerRunning(runner) {
+			r.OK("networkmanager started")
+			return nil
+		}
+	}
+	if lastErr != nil {
+		return lastErr
+	}
+	return fmt.Errorf("NetworkManager is not running")
+}
+
+func networkManagerRunning(runner Runner) bool {
+	out, err := runner.Run("nmcli", "-t", "-f", "RUNNING", "general")
+	return err == nil && strings.Contains(strings.ToLower(out), "running")
 }
 
 func requireCommand(r Runner, name string) error {

@@ -35,6 +35,7 @@ func configureMounts(cfg Config, systemd bool, r *Reporter, runner Runner) (Moun
 				return MountResult{}, err
 			}
 		} else {
+			cleanupLegacySystemdMount(m, r, runner)
 			if err := persistFstabMount(m, r); err != nil {
 				return MountResult{}, err
 			}
@@ -90,6 +91,7 @@ func configureTCPFallbackMount(m MountSpec, systemd bool, r *Reporter, runner Ru
 			return err
 		}
 	} else {
+		cleanupLegacySystemdMount(tcpMount, r, runner)
 		if err := persistFstabMount(tcpMount, r); err != nil {
 			return err
 		}
@@ -154,6 +156,30 @@ WantedBy=multi-user.target
 	}
 	r.OK("mount persistence %s", filepath.Base(autoPath))
 	return nil
+}
+
+func cleanupLegacySystemdMount(m MountSpec, r *Reporter, runner Runner) {
+	unitName := systemdMountUnitName(m.MountPoint)
+	autoName := strings.TrimSuffix(unitName, ".mount") + ".automount"
+	if runner.Exists("systemctl") {
+		_, _ = runner.Run("systemctl", "disable", "--now", autoName)
+		_, _ = runner.Run("systemctl", "disable", "--now", unitName)
+	}
+	removed := false
+	for _, name := range []string{autoName, unitName} {
+		p := filepath.Join("/etc/systemd/system", name)
+		if err := os.Remove(hostPath(p)); err == nil {
+			removed = true
+		} else if err != nil && !os.IsNotExist(err) {
+			r.Warn("legacy systemd mount cleanup failed for %s: %v", name, err)
+		}
+	}
+	if removed {
+		if runner.Exists("systemctl") {
+			_, _ = runner.Run("systemctl", "daemon-reload")
+		}
+		r.OK("mount persistence legacy-systemd removed %s", m.MountPoint)
+	}
 }
 
 func persistFstabMount(m MountSpec, r *Reporter) error {

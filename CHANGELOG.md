@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.5.6
+
+### Changed
+
+- `apply` now checks whether NetworkManager is running and attempts to start it
+  with `systemctl start NetworkManager`, falling back to
+  `service NetworkManager start` when available.
+- Mount persistence now always uses `/etc/fstab`; `storctl` no longer creates
+  systemd `.mount/.automount` units for NFS mounts.
+- When writing fstab persistence, `storctl` removes legacy systemd mount units
+  for the same mount point if they were created by earlier versions.
+
 ## v0.5.4
 
 ### Changed

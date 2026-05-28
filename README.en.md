@@ -416,13 +416,13 @@ Mount is TCP instead of RDMA:
   nfsstat -m
   ```
 
-systemd automount fails:
+NetworkManager is not running:
 
-- `storctl` falls back to direct `mount -t nfs`.
-- Inspect unit logs:
+- `storctl apply` tries to start NetworkManager before changing VLANs.
+- If it still fails, inspect the target host:
   ```bash
-  systemctl status mnt-share.automount --no-pager
-  journalctl -u mnt-share.automount -xe
+  systemctl enable --now NetworkManager
+  nmcli general
   ```
 
 QoS was not configured:
@@ -442,6 +442,6 @@ QoS was not configured:
 - `storctl` does not implement DTFS, `cid`, `dn`, or zone generation.
 - State is written to `/var/lib/storctl/state.json`; current `schema_version`
   is `1`.
-- With systemd, mounts use `.mount/.automount` units. Without systemd, mounts
-  are persisted in `/etc/fstab`.
+- Mount persistence is always written to `/etc/fstab`; `storctl` no longer
+  creates systemd `.mount/.automount` units.
 - The project uses Apache-2.0. Upgrade notes live in [CHANGELOG.md](CHANGELOG.md).

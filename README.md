@@ -378,13 +378,13 @@ storctl apply ... --allow-tcp-fallback
   nfsstat -m
   ```
 
-systemd automount 失败：
+NetworkManager 未运行：
 
-- `storctl` 会 fallback 到直接 `mount -t nfs`。
-- 查看 unit 日志：
+- `storctl apply` 会先尝试启动 NetworkManager。
+- 如果仍失败，在目标机手动检查：
   ```bash
-  systemctl status mnt-share.automount --no-pager
-  journalctl -u mnt-share.automount -xe
+  systemctl enable --now NetworkManager
+  nmcli general
   ```
 
 QoS 没有被配置：
@@ -401,5 +401,5 @@ QoS 没有被配置：
 
 - `storctl` 不实现 DTFS、`cid`、`dn` 或 zone 生成。
 - 状态文件写入 `/var/lib/storctl/state.json`，当前 `schema_version` 为 `1`。
-- 有 systemd 时使用 `.mount/.automount` 持久化挂载；没有 systemd 时写入 `/etc/fstab`。
+- 挂载持久化统一写入 `/etc/fstab`，不再生成 systemd `.mount/.automount`。
 - 项目使用 Apache-2.0 license，升级说明见 [CHANGELOG.md](CHANGELOG.md)。

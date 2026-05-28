@@ -1,6 +1,8 @@
 package storctl
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -93,6 +95,77 @@ func TestTCPFallbackOptionsUseTCP(t *testing.T) {
 	got := tcpFallbackOptions(defaultNFSOptions)
 	if !containsAll(got, "vers=3", "proto=tcp", "nolock", "nconnect=8") || strings.Contains(got, "proto=rdma") {
 		t.Fatalf("unexpected tcp options: %s", got)
+	}
+}
+
+func TestEnsureNetworkManagerStartedSkipsWhenAlreadyRunning(t *testing.T) {
+	r := &fakeRunner{
+		exists: map[string]bool{"systemctl": true},
+		outputs: map[string]string{
+			"nmcli -t -f RUNNING general": "running\n",
+		},
+	}
+	var out, stderr strings.Builder
+	if err := ensureNetworkManagerStarted(r, NewReporter(&out, &stderr)); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(r.calls) != 1 {
+		t.Fatalf("unexpected calls: %+v", r.calls)
+	}
+}
+
+func TestEnsureNetworkManagerStartedUsesSystemctl(t *testing.T) {
+	r := &fakeRunner{
+		exists: map[string]bool{"systemctl": true},
+		outputs: map[string]string{
+			"nmcli -t -f RUNNING general":    "running\n",
+			"systemctl start NetworkManager": "",
+		},
+		errors: map[string]error{
+			"nmcli -t -f RUNNING general": failf("NetworkManager is not running"),
+		},
+		failOnce: map[string]bool{
+			"nmcli -t -f RUNNING general": true,
+		},
+	}
+	var out, stderr strings.Builder
+	if err := ensureNetworkManagerStarted(r, NewReporter(&out, &stderr)); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !containsAll(strings.Join(r.calls, "\n"), "systemctl start NetworkManager") {
+		t.Fatalf("NetworkManager start was not attempted: %+v", r.calls)
+	}
+}
+
+func TestCleanupLegacySystemdMountRemovesUnits(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(simRootEnv, root)
+	systemdDir := filepath.Join(root, "etc/systemd/system")
+	if err := os.MkdirAll(systemdDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"mnt-share.mount", "mnt-share.automount"} {
+		if err := os.WriteFile(filepath.Join(systemdDir, name), []byte("legacy"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r := &fakeRunner{
+		exists: map[string]bool{"systemctl": true},
+		outputs: map[string]string{
+			"systemctl disable --now mnt-share.automount": "",
+			"systemctl disable --now mnt-share.mount":     "",
+			"systemctl daemon-reload":                     "",
+		},
+	}
+	var out, stderr strings.Builder
+	cleanupLegacySystemdMount(MountSpec{MountPoint: "/mnt/share"}, NewReporter(&out, &stderr), r)
+	for _, name := range []string{"mnt-share.mount", "mnt-share.automount"} {
+		if _, err := os.Stat(filepath.Join(systemdDir, name)); !os.IsNotExist(err) {
+			t.Fatalf("legacy unit %s still exists: %v", name, err)
+		}
+	}
+	if !containsAll(strings.Join(r.calls, "\n"), "systemctl disable --now mnt-share.automount", "systemctl daemon-reload") {
+		t.Fatalf("unexpected systemctl calls: %+v", r.calls)
 	}
 }
 
