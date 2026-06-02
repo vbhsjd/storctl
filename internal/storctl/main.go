@@ -107,6 +107,16 @@ func Main(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		return 0
+	case "reconcile-mounts":
+		cfg, err := parseReconcileMounts(args[1:])
+		if err != nil {
+			r.Fail("args", err.Error(), "run: storctl help")
+			return 2
+		}
+		if err := ReconcileMounts(cfg, r, NewOSRunner("", "")); err != nil {
+			return 1
+		}
+		return 0
 	default:
 		r.Fail("command", fmt.Sprintf("unknown command %q", args[0]), "run: storctl help")
 		return 2
@@ -127,6 +137,7 @@ usage:
   storctl apply --nic NIC --vlan-id ID --data-ip CIDR --gateway IP --mount SERVER:/EXPORT:/MOUNT[:OPTS] [flags]
   storctl apply --profile NAME --nic NIC [flags]
   storctl check [--json]
+  storctl reconcile-mounts --profile NAME [--allow-tcp-fallback]
   storctl help
 
 read-only commands:
@@ -134,7 +145,7 @@ read-only commands:
   These do not mutate the host and do not require root.
 
 mutating commands:
-  install-driver, apply
+  install-driver, apply, reconcile-mounts
   These mutate the host and require root.
 
 common flags:

@@ -444,4 +444,6 @@ QoS was not configured:
   is `1`.
 - Mount persistence is always written to `/etc/fstab`; `storctl` no longer
   creates systemd `.mount/.automount` units.
+- For already-mounted hosts that only need legacy systemd automount cleanup,
+  run `storctl reconcile-mounts --profile <name> --profile-file /etc/storctl/profiles.json --allow-tcp-fallback`.
 - The project uses Apache-2.0. Upgrade notes live in [CHANGELOG.md](CHANGELOG.md).

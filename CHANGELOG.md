@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.5.7
+
+### Added
+
+- Added `storctl reconcile-mounts`, a small root-only command that reconciles
+  mount persistence without changing NICs, VLANs, QoS, or current mounts.
+
+### Changed
+
+- `reconcile-mounts` removes legacy systemd `.mount/.automount` units for the
+  configured mount points and writes `/etc/fstab`.
+- When `--allow-tcp-fallback` is passed and the current mount is already
+  `proto=tcp`, `reconcile-mounts` preserves TCP fallback options in fstab.
+
 ## v0.5.6
 
 ### Changed

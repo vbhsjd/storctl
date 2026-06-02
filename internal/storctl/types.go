@@ -308,6 +308,48 @@ func parseCheck(args []string) (Config, error) {
 	return cfg, nil
 }
 
+func parseReconcileMounts(args []string) (Config, error) {
+	var profileName, profileFile string
+	var mounts mountList
+	cfg := Config{AllowTCPFallback: false}
+	fs := flag.NewFlagSet("reconcile-mounts", flag.ContinueOnError)
+	fs.StringVar(&profileName, "profile", "", "profile name")
+	fs.StringVar(&profileFile, "profile-file", "", "profile JSON path")
+	fs.BoolVar(&cfg.AllowTCPFallback, "allow-tcp-fallback", false, "preserve TCP NFS fallback when current mount uses proto=tcp")
+	fs.Var(&mounts, "mount", "NFS mount: server:/export:/mount[:opts], repeatable")
+	if err := fs.Parse(args); err != nil {
+		return Config{}, err
+	}
+	if fs.NArg() != 0 {
+		return Config{}, fmt.Errorf("unexpected argument: %s", fs.Arg(0))
+	}
+	if profileName != "" {
+		profile, err := loadNamedProfile(profileFile, profileName)
+		if err != nil {
+			return Config{}, err
+		}
+		cfg.Mounts = profileMounts(profile.Mounts)
+	}
+	if len(mounts) > 0 {
+		cfg.Mounts = []MountSpec(mounts)
+	}
+	if len(cfg.Mounts) == 0 {
+		return Config{}, errors.New("--profile or at least one --mount is required")
+	}
+	for _, m := range cfg.Mounts {
+		if m.Server == "" || m.Export == "" || m.MountPoint == "" {
+			return Config{}, errors.New("mount fields can not be empty")
+		}
+		if !strings.HasPrefix(m.Export, "/") {
+			return Config{}, errors.New("mount export must start with /")
+		}
+		if !strings.HasPrefix(m.MountPoint, "/") {
+			return Config{}, errors.New("mount point must start with /")
+		}
+	}
+	return cfg, nil
+}
+
 func parseInstallDriver(args []string) (InstallDriverConfig, error) {
 	cfg := InstallDriverConfig{ArtifactDir: "/root/storage_pkgs"}
 	fs := flag.NewFlagSet("install-driver", flag.ContinueOnError)

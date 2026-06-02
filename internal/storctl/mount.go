@@ -13,6 +13,30 @@ type MountResult struct {
 	DegradedReason string
 }
 
+func ReconcileMounts(cfg Config, r *Reporter, runner Runner) error {
+	if err := requireRoot(); err != nil {
+		r.Fail("permission", err.Error(), "run storctl as root")
+		return err
+	}
+	for _, m := range cfg.Mounts {
+		if err := os.MkdirAll(hostPath(m.MountPoint), 0755); err != nil {
+			return err
+		}
+		target := m
+		if cfg.AllowTCPFallback {
+			if ok, _ := mountIsTCP(m, runner); ok {
+				target.Options = tcpFallbackOptions(m.Options)
+				r.Warn("mount %s currently proto=tcp; preserving tcp fallback in fstab", m.MountPoint)
+			}
+		}
+		cleanupLegacySystemdMount(target, r, runner)
+		if err := persistFstabMount(target, r); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func configureMounts(cfg Config, systemd bool, r *Reporter, runner Runner) (MountResult, error) {
 	if err := requireRDMAClient(runner); err != nil {
 		if !cfg.AllowTCPFallback {

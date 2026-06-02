@@ -169,6 +169,77 @@ func TestCleanupLegacySystemdMountRemovesUnits(t *testing.T) {
 	}
 }
 
+func TestReconcileMountsWritesFstabAndRemovesLegacyUnits(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(simRootEnv, root)
+	systemdDir := filepath.Join(root, "etc/systemd/system")
+	if err := os.MkdirAll(systemdDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(systemdDir, "mnt-share.automount"), []byte("legacy"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	r := &fakeRunner{
+		exists: map[string]bool{"systemctl": true},
+		outputs: map[string]string{
+			"systemctl disable --now mnt-share.automount": "",
+			"systemctl disable --now mnt-share.mount":     "",
+			"systemctl daemon-reload":                     "",
+		},
+	}
+	cfg := Config{Mounts: []MountSpec{{
+		Server:     "172.27.1.1",
+		Export:     "/Share",
+		MountPoint: "/mnt/share",
+		Options:    defaultNFSOptions,
+	}}}
+	var out, stderr strings.Builder
+	if err := ReconcileMounts(cfg, NewReporter(&out, &stderr), r); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	fstab, err := os.ReadFile(filepath.Join(root, "etc/fstab"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !containsAll(string(fstab), "172.27.1.1:/Share /mnt/share nfs", "proto=rdma") {
+		t.Fatalf("unexpected fstab: %s", fstab)
+	}
+	if _, err := os.Stat(filepath.Join(systemdDir, "mnt-share.automount")); !os.IsNotExist(err) {
+		t.Fatalf("legacy automount still exists: %v", err)
+	}
+}
+
+func TestReconcileMountsPreservesTCPFallbackWhenMountedTCP(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(simRootEnv, root)
+	r := &fakeRunner{
+		exists: map[string]bool{"findmnt": true},
+		outputs: map[string]string{
+			"findmnt -n --mountpoint /mnt/share -o FSTYPE,OPTIONS": "nfs4 rw,vers=3,proto=tcp,nconnect=8\n",
+		},
+	}
+	cfg := Config{
+		AllowTCPFallback: true,
+		Mounts: []MountSpec{{
+			Server:     "172.27.1.1",
+			Export:     "/Share",
+			MountPoint: "/mnt/share",
+			Options:    defaultNFSOptions,
+		}},
+	}
+	var out, stderr strings.Builder
+	if err := ReconcileMounts(cfg, NewReporter(&out, &stderr), r); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	fstab, err := os.ReadFile(filepath.Join(root, "etc/fstab"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !containsAll(string(fstab), "proto=tcp", "vers=3", "nconnect=8") || strings.Contains(string(fstab), "proto=rdma") {
+		t.Fatalf("unexpected fstab: %s", fstab)
+	}
+}
+
 type fakeRunner struct {
 	exists   map[string]bool
 	outputs  map[string]string
