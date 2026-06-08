@@ -442,8 +442,8 @@ QoS was not configured:
 - `storctl` does not implement DTFS, `cid`, `dn`, or zone generation.
 - State is written to `/var/lib/storctl/state.json`; current `schema_version`
   is `1`.
-- Mount persistence is always written to `/etc/fstab`; `storctl` no longer
-  creates systemd `.mount/.automount` units.
+- Mount persistence is always written to `/etc/fstab` with `_netdev,nofail`;
+  `storctl` no longer creates systemd `.mount/.automount` units.
 - For already-mounted hosts that only need legacy systemd automount cleanup,
   run `storctl reconcile-mounts --profile <name> --profile-file /etc/storctl/profiles.json --allow-tcp-fallback`.
 - The project uses Apache-2.0. Upgrade notes live in [CHANGELOG.md](CHANGELOG.md).

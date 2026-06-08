@@ -201,7 +201,7 @@ func TestReconcileMountsWritesFstabAndRemovesLegacyUnits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !containsAll(string(fstab), "172.27.1.1:/Share /mnt/share nfs", "proto=rdma") {
+	if !containsAll(string(fstab), "172.27.1.1:/Share /mnt/share nfs", "proto=rdma", "_netdev", "nofail") {
 		t.Fatalf("unexpected fstab: %s", fstab)
 	}
 	if _, err := os.Stat(filepath.Join(systemdDir, "mnt-share.automount")); !os.IsNotExist(err) {
@@ -235,8 +235,37 @@ func TestReconcileMountsPreservesTCPFallbackWhenMountedTCP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !containsAll(string(fstab), "proto=tcp", "vers=3", "nconnect=8") || strings.Contains(string(fstab), "proto=rdma") {
+	if !containsAll(string(fstab), "proto=tcp", "vers=3", "nconnect=8", "_netdev", "nofail") || strings.Contains(string(fstab), "proto=rdma") {
 		t.Fatalf("unexpected fstab: %s", fstab)
+	}
+}
+
+func TestPersistFstabMountReplacesLegacyLineWithNetworkOptions(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(simRootEnv, root)
+	if err := os.MkdirAll(filepath.Join(root, "etc"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	old := "172.27.1.1:/Share /mnt/share nfs " + defaultNFSOptions + " 0 0\n"
+	if err := os.WriteFile(filepath.Join(root, "etc/fstab"), []byte(old), 0644); err != nil {
+		t.Fatal(err)
+	}
+	var out, stderr strings.Builder
+	if err := persistFstabMount(MountSpec{
+		Server:     "172.27.1.1",
+		Export:     "/Share",
+		MountPoint: "/mnt/share",
+		Options:    defaultNFSOptions,
+	}, NewReporter(&out, &stderr)); err != nil {
+		t.Fatal(err)
+	}
+	fstab, err := os.ReadFile(filepath.Join(root, "etc/fstab"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(fstab)
+	if strings.Count(text, "/mnt/share") != 1 || !containsAll(text, "_netdev", "nofail") {
+		t.Fatalf("legacy fstab line was not replaced: %s", text)
 	}
 }
 

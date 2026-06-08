@@ -207,7 +207,8 @@ func cleanupLegacySystemdMount(m MountSpec, r *Reporter, runner Runner) {
 }
 
 func persistFstabMount(m MountSpec, r *Reporter) error {
-	line := fmt.Sprintf("%s:%s %s nfs %s 0 0", m.Server, m.Export, m.MountPoint, m.Options)
+	options := mergeNFSOptions(m.Options, "_netdev,nofail")
+	line := fmt.Sprintf("%s:%s %s nfs %s 0 0", m.Server, m.Export, m.MountPoint, options)
 	path := "/etc/fstab"
 	data, err := os.ReadFile(hostPath(path))
 	if err != nil && !os.IsNotExist(err) {

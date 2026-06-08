@@ -401,7 +401,7 @@ QoS 没有被配置：
 
 - `storctl` 不实现 DTFS、`cid`、`dn` 或 zone 生成。
 - 状态文件写入 `/var/lib/storctl/state.json`，当前 `schema_version` 为 `1`。
-- 挂载持久化统一写入 `/etc/fstab`，不再生成 systemd `.mount/.automount`。
+- 挂载持久化统一写入 `/etc/fstab`，并自动追加 `_netdev,nofail`；不再生成 systemd `.mount/.automount`。
 - 已经挂载成功但需要清理旧 systemd automount 时，可以运行
   `storctl reconcile-mounts --profile <name> --profile-file /etc/storctl/profiles.json --allow-tcp-fallback`。
 - 项目使用 Apache-2.0 license，升级说明见 [CHANGELOG.md](CHANGELOG.md)。

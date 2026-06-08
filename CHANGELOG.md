@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.5.8
+
+### Changed
+
+- NFS entries written to `/etc/fstab` now always include `_netdev,nofail`, so
+  boot does not require the storage network to be ready immediately.
+- Existing storctl-managed fstab entries for the same mount point are replaced
+  idempotently with the updated options.
+
 ## v0.5.7
 
 ### Added
