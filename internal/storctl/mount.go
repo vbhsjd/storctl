@@ -18,6 +18,7 @@ func ReconcileMounts(cfg Config, r *Reporter, runner Runner) error {
 		r.Fail("permission", err.Error(), "run storctl as root")
 		return err
 	}
+	persistenceChanged := false
 	for _, m := range cfg.Mounts {
 		if err := os.MkdirAll(hostPath(m.MountPoint), 0755); err != nil {
 			return err
@@ -29,11 +30,18 @@ func ReconcileMounts(cfg Config, r *Reporter, runner Runner) error {
 				r.Warn("mount %s currently proto=tcp; preserving tcp fallback in fstab", m.MountPoint)
 			}
 		}
-		cleanupLegacySystemdMount(target, r, runner)
-		if err := persistFstabMount(target, r); err != nil {
+		if cleanupLegacySystemdMount(target, r, runner) {
+			persistenceChanged = true
+		}
+		changed, err := persistFstabMount(target, r)
+		if err != nil {
 			return err
 		}
+		if changed {
+			persistenceChanged = true
+		}
 	}
+	reloadAndMountFstabNFS(persistenceChanged, r, runner)
 	return nil
 }
 
@@ -50,6 +58,7 @@ func configureMounts(cfg Config, systemd bool, r *Reporter, runner Runner) (Moun
 		return MountResult{Degraded: true, DegradedReason: reason}, nil
 	}
 	result := MountResult{}
+	persistenceChanged := false
 	for _, m := range cfg.Mounts {
 		if err := os.MkdirAll(hostPath(m.MountPoint), 0755); err != nil {
 			return MountResult{}, err
@@ -59,9 +68,15 @@ func configureMounts(cfg Config, systemd bool, r *Reporter, runner Runner) (Moun
 				return MountResult{}, err
 			}
 		} else {
-			cleanupLegacySystemdMount(m, r, runner)
-			if err := persistFstabMount(m, r); err != nil {
+			if cleanupLegacySystemdMount(m, r, runner) {
+				persistenceChanged = true
+			}
+			changed, err := persistFstabMount(m, r)
+			if err != nil {
 				return MountResult{}, err
+			}
+			if changed {
+				persistenceChanged = true
 			}
 		}
 		if err := mountNow(m, systemd, r, runner); err != nil {
@@ -92,6 +107,7 @@ func configureMounts(cfg Config, systemd bool, r *Reporter, runner Runner) (Moun
 		}
 		r.OK("mount %s proto=rdma", m.MountPoint)
 	}
+	reloadAndMountFstabNFS(persistenceChanged, r, runner)
 	return result, nil
 }
 
@@ -115,10 +131,12 @@ func configureTCPFallbackMount(m MountSpec, systemd bool, r *Reporter, runner Ru
 			return err
 		}
 	} else {
-		cleanupLegacySystemdMount(tcpMount, r, runner)
-		if err := persistFstabMount(tcpMount, r); err != nil {
+		persistenceChanged := cleanupLegacySystemdMount(tcpMount, r, runner)
+		changed, err := persistFstabMount(tcpMount, r)
+		if err != nil {
 			return err
 		}
+		reloadAndMountFstabNFS(persistenceChanged || changed, r, runner)
 	}
 	if isMountPoint(tcpMount.MountPoint, runner) {
 		if ok, _ := mountIsTCP(tcpMount, runner); !ok {
@@ -182,7 +200,7 @@ WantedBy=multi-user.target
 	return nil
 }
 
-func cleanupLegacySystemdMount(m MountSpec, r *Reporter, runner Runner) {
+func cleanupLegacySystemdMount(m MountSpec, r *Reporter, runner Runner) bool {
 	unitName := systemdMountUnitName(m.MountPoint)
 	autoName := strings.TrimSuffix(unitName, ".mount") + ".automount"
 	if runner.Exists("systemctl") {
@@ -204,15 +222,16 @@ func cleanupLegacySystemdMount(m MountSpec, r *Reporter, runner Runner) {
 		}
 		r.OK("mount persistence legacy-systemd removed %s", m.MountPoint)
 	}
+	return removed
 }
 
-func persistFstabMount(m MountSpec, r *Reporter) error {
+func persistFstabMount(m MountSpec, r *Reporter) (bool, error) {
 	options := mergeNFSOptions(m.Options, "_netdev,nofail")
 	line := fmt.Sprintf("%s:%s %s nfs %s 0 0", m.Server, m.Export, m.MountPoint, options)
 	path := "/etc/fstab"
 	data, err := os.ReadFile(hostPath(path))
 	if err != nil && !os.IsNotExist(err) {
-		return err
+		return false, err
 	}
 	lines := []string{}
 	found := false
@@ -236,14 +255,34 @@ func persistFstabMount(m MountSpec, r *Reporter) error {
 	out := strings.Join(lines, "\n") + "\n"
 	changed, err := writeFileChanged(path, []byte(out), 0644)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if changed {
 		r.OK("mount persistence fstab %s", m.MountPoint)
 	} else {
 		r.Skip("mount persistence fstab %s", m.MountPoint)
 	}
-	return nil
+	return changed, nil
+}
+
+func reloadAndMountFstabNFS(changed bool, r *Reporter, runner Runner) {
+	if !changed {
+		return
+	}
+	if runner.Exists("systemctl") {
+		if _, err := runner.Run("systemctl", "daemon-reload"); err != nil {
+			r.Warn("systemctl daemon-reload failed: %v", err)
+		} else {
+			r.OK("systemd daemon-reload")
+		}
+	}
+	if runner.Exists("mount") {
+		if _, err := runner.Run("mount", "-a", "-t", "nfs"); err != nil {
+			r.Warn("mount -a -t nfs failed: %v", err)
+		} else {
+			r.OK("mount -a nfs")
+		}
+	}
 }
 
 func mountNow(m MountSpec, systemd bool, r *Reporter, runner Runner) error {

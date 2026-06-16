@@ -443,6 +443,7 @@ QoS was not configured:
 - State is written to `/var/lib/storctl/state.json`; current `schema_version`
   is `1`.
 - Mount persistence is always written to `/etc/fstab` with `_netdev,nofail`;
+  after changes storctl runs `systemctl daemon-reload` and `mount -a -t nfs`.
   `storctl` no longer creates systemd `.mount/.automount` units.
 - For already-mounted hosts that only need legacy systemd automount cleanup,
   run `storctl reconcile-mounts --profile <name> --profile-file /etc/storctl/profiles.json --allow-tcp-fallback`.

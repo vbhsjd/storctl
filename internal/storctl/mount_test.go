@@ -155,6 +155,7 @@ func TestCleanupLegacySystemdMountRemovesUnits(t *testing.T) {
 			"systemctl disable --now mnt-share.automount": "",
 			"systemctl disable --now mnt-share.mount":     "",
 			"systemctl daemon-reload":                     "",
+			"mount -a -t nfs":                             "",
 		},
 	}
 	var out, stderr strings.Builder
@@ -180,11 +181,12 @@ func TestReconcileMountsWritesFstabAndRemovesLegacyUnits(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := &fakeRunner{
-		exists: map[string]bool{"systemctl": true},
+		exists: map[string]bool{"systemctl": true, "mount": true},
 		outputs: map[string]string{
 			"systemctl disable --now mnt-share.automount": "",
 			"systemctl disable --now mnt-share.mount":     "",
 			"systemctl daemon-reload":                     "",
+			"mount -a -t nfs":                             "",
 		},
 	}
 	cfg := Config{Mounts: []MountSpec{{
@@ -207,15 +209,19 @@ func TestReconcileMountsWritesFstabAndRemovesLegacyUnits(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(systemdDir, "mnt-share.automount")); !os.IsNotExist(err) {
 		t.Fatalf("legacy automount still exists: %v", err)
 	}
+	if !containsAll(strings.Join(r.calls, "\n"), "systemctl daemon-reload", "mount -a -t nfs") {
+		t.Fatalf("fstab activation missing: %+v", r.calls)
+	}
 }
 
 func TestReconcileMountsPreservesTCPFallbackWhenMountedTCP(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv(simRootEnv, root)
 	r := &fakeRunner{
-		exists: map[string]bool{"findmnt": true},
+		exists: map[string]bool{"findmnt": true, "mount": true},
 		outputs: map[string]string{
 			"findmnt -n --mountpoint /mnt/share -o FSTYPE,OPTIONS": "nfs4 rw,vers=3,proto=tcp,nconnect=8\n",
+			"mount -a -t nfs": "",
 		},
 	}
 	cfg := Config{
@@ -251,13 +257,17 @@ func TestPersistFstabMountReplacesLegacyLineWithNetworkOptions(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out, stderr strings.Builder
-	if err := persistFstabMount(MountSpec{
+	changed, err := persistFstabMount(MountSpec{
 		Server:     "172.27.1.1",
 		Export:     "/Share",
 		MountPoint: "/mnt/share",
 		Options:    defaultNFSOptions,
-	}, NewReporter(&out, &stderr)); err != nil {
+	}, NewReporter(&out, &stderr))
+	if err != nil {
 		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("expected fstab to change")
 	}
 	fstab, err := os.ReadFile(filepath.Join(root, "etc/fstab"))
 	if err != nil {

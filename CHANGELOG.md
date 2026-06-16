@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.5.9
+
+### Changed
+
+- After storctl changes NFS entries in `/etc/fstab`, it now runs
+  `systemctl daemon-reload` when systemd is available and then runs
+  `mount -a -t nfs`.
+- `mount -a -t nfs` failures are reported as warnings; the explicit per-mount
+  mount and verification path remains the source of truth for apply success.
+
 ## v0.5.8
 
 ### Changed
