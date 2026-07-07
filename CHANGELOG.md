@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.5.10
+
+### Fixed
+
+- Profile data IP derivation no longer hardcodes the `172.27` prefix. It now
+  uses the first two octets of the profile gateway, so a gateway of
+  `10.10.0.1` with mapping `97 -> 2` derives `10.10.2.x`.
+- Existing `172.27.0.1` profiles remain backward compatible.
+
 ## v0.5.9
 
 ### Changed

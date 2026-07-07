@@ -310,6 +310,10 @@ func deriveDataCIDR(mgmtIP net.IP, profile Profile) (string, error) {
 	if mgmtIP == nil || mgmtIP.To4() == nil {
 		return "", fmt.Errorf("management IP is not IPv4")
 	}
+	gateway := net.ParseIP(profile.Gateway)
+	if gateway == nil || gateway.To4() == nil {
+		return "", fmt.Errorf("profile gateway must be IPv4 for data IP derivation")
+	}
 	prefix := profile.Prefix
 	if prefix == 0 {
 		prefix = 18
@@ -320,5 +324,6 @@ func deriveDataCIDR(mgmtIP net.IP, profile Profile) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("no third_octet_map entry for management third octet %d", third)
 	}
-	return fmt.Sprintf("172.27.%d.%d/%d", mapped, fourth, prefix), nil
+	gateway4 := gateway.To4()
+	return fmt.Sprintf("%d.%d.%d.%d/%d", gateway4[0], gateway4[1], mapped, fourth, prefix), nil
 }

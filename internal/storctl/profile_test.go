@@ -33,6 +33,40 @@ func TestParsePlanWithProfileDerivesDataIP(t *testing.T) {
 	}
 }
 
+func TestProfileDerivesDataIPFromGatewayNetwork(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "storctl-profiles.json")
+	data := `{
+  "profiles": {
+    "hz": {
+      "vlan_id": 2000,
+      "gateway": "10.10.0.1",
+      "prefix": 16,
+      "route_table": 5000,
+      "mtu": 5500,
+      "third_octet_map": {"97": 2},
+      "mounts": [
+        {"server": "10.10.0.11", "export": "/share", "mount_point": "/mnt/a800_share"}
+      ]
+    }
+  }
+}`
+	if err := os.WriteFile(path, []byte(data), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := parsePlan([]string{
+		"--profile-file", path,
+		"--profile", "hz",
+		"--nic", "enp23s0f1",
+		"--mgmt-ip", "90.90.97.6",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.DataCIDR != "10.10.2.6/16" {
+		t.Fatalf("DataCIDR = %q, want 10.10.2.6/16", cfg.DataCIDR)
+	}
+}
+
 func TestCLIOverridesProfile(t *testing.T) {
 	path := writeTestProfile(t)
 	cfg, err := parsePlan([]string{
